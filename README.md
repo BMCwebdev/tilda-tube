@@ -5,7 +5,7 @@ A self-hosted YouTube media server for kids. Parents curate a safe, ad-free libr
 ## How It Works
 
 1. **Parent adds YouTube channels** (or individual videos) via a web UI
-2. **Background service polls RSS feeds** every 15 minutes for new uploads
+2. **Daily sync job polls RSS feeds** at 2:00am for new uploads
 3. **New videos land in an approval queue** (or auto-download if enabled)
 4. **Approved videos are downloaded** via `yt-dlp` to a local drive
 5. **Plex serves the library** to Apple TV — child sees only curated content

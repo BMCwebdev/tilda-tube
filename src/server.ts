@@ -5,7 +5,7 @@ import cron from 'node-cron';
 import { getDb } from './db.js';
 import { router } from './api.js';
 import { pollChannels } from './poller.js';
-import { startDownloader } from './downloader.js';
+import { downloadAllApproved } from './downloader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -32,17 +32,21 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
 });
 
-// Start RSS poller (every 15 minutes)
-cron.schedule('*/15 * * * *', () => {
-  console.log(`[Cron] Running poll at ${new Date().toISOString()}`);
-  pollChannels().catch((err) => console.error('[Cron] Poll error:', err));
+// Daily sync job at 2:00am: poll RSS feeds then download all approved videos
+async function dailySyncJob() {
+  console.log(`[Cron] Starting daily sync at ${new Date().toISOString()}`);
+  await pollChannels();
+  console.log('[Cron] Polling complete, starting downloads...');
+  await downloadAllApproved();
+  console.log(`[Cron] Daily sync complete at ${new Date().toISOString()}`);
+}
+
+cron.schedule('0 2 * * *', () => {
+  dailySyncJob().catch((err) => console.error('[Cron] Daily sync error:', err));
 });
 
-// Run initial poll on startup
-console.log('[Server] Running initial poll...');
-pollChannels().catch((err) => console.error('[Server] Initial poll error:', err));
+// Run initial sync on startup
+console.log('[Server] Running initial sync...');
+dailySyncJob().catch((err) => console.error('[Server] Initial sync error:', err));
 
-// Start downloader watcher
-startDownloader();
-
-console.log('[Server] TildaTube is running');
+console.log('[Server] TildaTube is running (daily sync at 2:00am)');

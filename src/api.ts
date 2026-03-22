@@ -11,6 +11,7 @@ import {
   insertVideo,
   getServerStatus,
 } from './db.js';
+import { downloadAllApproved } from './downloader.js';
 
 export const router = Router();
 
@@ -131,6 +132,11 @@ router.post('/api/videos/:id/approve', (req: Request, res: Response) => {
 
   updateVideoStatus(id, 'approved');
   res.json({ success: true, status: 'approved' });
+
+  // Trigger immediate download in the background
+  downloadAllApproved().catch((err) =>
+    console.error('[API] Background download error:', err)
+  );
 });
 
 router.post('/api/videos/:id/reject', (req: Request, res: Response) => {

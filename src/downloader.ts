@@ -1,45 +1,56 @@
 import { execFile } from 'child_process';
-import { getApprovedVideos, updateVideoStatus } from './db.js';
+import { getApprovedVideos, updateVideoStatus, type Video } from './db.js';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TubeSafe/media';
 
 let isDownloading = false;
 
-export function startDownloader(): void {
-  setInterval(async () => {
-    if (isDownloading) return;
+/**
+ * Download all approved videos sequentially.
+ * Called after the daily poll completes, and also triggered immediately
+ * when a parent approves a video or adds a single video via the UI.
+ */
+export async function downloadAllApproved(): Promise<void> {
+  if (isDownloading) {
+    console.log('[Downloader] Already downloading, skipping');
+    return;
+  }
 
-    const approved = getApprovedVideos();
-    if (approved.length === 0) return;
+  isDownloading = true;
+  try {
+    while (true) {
+      const approved = getApprovedVideos();
+      if (approved.length === 0) break;
 
-    const video = approved[0];
-    isDownloading = true;
-
-    console.log(`[Downloader] Starting download: "${video.title}" (${video.youtube_id})`);
-    updateVideoStatus(video.id, 'downloading');
-
-    try {
-      if (DRY_RUN) {
-        console.log(`[Downloader] DRY_RUN: Skipping yt-dlp for "${video.title}"`);
-        const fakePath = `${MEDIA_DIR}/DryRun/${video.youtube_id}.mp4`;
-        updateVideoStatus(video.id, 'done', { file_path: fakePath });
-        console.log(`[Downloader] DRY_RUN: Marked "${video.title}" as done`);
-      } else {
-        const filePath = await downloadVideo(video.youtube_id);
-        updateVideoStatus(video.id, 'done', { file_path: filePath });
-        console.log(`[Downloader] Completed: "${video.title}"`);
-      }
-    } catch (err: any) {
-      const errorMsg = err.message || String(err);
-      console.error(`[Downloader] Failed: "${video.title}" — ${errorMsg}`);
-      updateVideoStatus(video.id, 'error', { error_message: errorMsg });
-    } finally {
-      isDownloading = false;
+      const video = approved[0];
+      await downloadOne(video);
     }
-  }, 30_000);
+  } finally {
+    isDownloading = false;
+  }
+}
 
-  console.log(`[Downloader] Watcher started (30s interval, DRY_RUN=${DRY_RUN})`);
+async function downloadOne(video: Video): Promise<void> {
+  console.log(`[Downloader] Starting download: "${video.title}" (${video.youtube_id})`);
+  updateVideoStatus(video.id, 'downloading');
+
+  try {
+    if (DRY_RUN) {
+      console.log(`[Downloader] DRY_RUN: Skipping yt-dlp for "${video.title}"`);
+      const fakePath = `${MEDIA_DIR}/DryRun/${video.youtube_id}.mp4`;
+      updateVideoStatus(video.id, 'done', { file_path: fakePath });
+      console.log(`[Downloader] DRY_RUN: Marked "${video.title}" as done`);
+    } else {
+      const filePath = await downloadVideo(video.youtube_id);
+      updateVideoStatus(video.id, 'done', { file_path: filePath });
+      console.log(`[Downloader] Completed: "${video.title}"`);
+    }
+  } catch (err: any) {
+    const errorMsg = err.message || String(err);
+    console.error(`[Downloader] Failed: "${video.title}" — ${errorMsg}`);
+    updateVideoStatus(video.id, 'error', { error_message: errorMsg });
+  }
 }
 
 function downloadVideo(youtubeId: string): Promise<string> {
@@ -65,7 +76,6 @@ function downloadVideo(youtubeId: string): Promise<string> {
         reject(new Error(stderr || error.message));
         return;
       }
-      // --print after_move:filepath outputs the final file path
       const filePath = stdout.trim().split('\n').pop() || '';
       resolve(filePath);
     });
