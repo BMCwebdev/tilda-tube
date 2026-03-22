@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tildatube</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- EDIT THIS: Replace with output of `which node` on Mac Mini -->
+        <string>/usr/local/bin/node</string>
+        <!-- EDIT THIS: Replace USERNAME with your macOS username -->
+        <string>/Users/USERNAME/tilda-tube/dist/server.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <!-- EDIT THIS: Replace USERNAME with your macOS username -->
+    <string>/Users/USERNAME/tilda-tube</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>NODE_ENV</key>
+        <string>production</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Volumes/TubeSafe/logs/tildatube.out</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Volumes/TubeSafe/logs/tildatube.err</string>
+</dict>
+</plist>
