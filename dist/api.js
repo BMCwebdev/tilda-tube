@@ -16,9 +16,8 @@ router.post('/api/channels', async (req, res) => {
         return;
     }
     try {
-        // Resolve channel ID using yt-dlp
-        const channelId = await resolveChannelId(url);
-        const channelName = await resolveChannelName(url);
+        // Resolve channel ID and name in a single yt-dlp call
+        const { channelId, channelName } = await resolveChannel(url);
         const channel = addChannel({
             name: channelName,
             channel_id: channelId,
@@ -130,59 +129,39 @@ router.get('/api/status', (_req, res) => {
     res.json(status);
 });
 // --- Helpers ---
-function resolveChannelId(url) {
+function resolveChannel(url) {
     return new Promise((resolve, reject) => {
         const DRY_RUN = process.env.DRY_RUN === 'true';
         if (DRY_RUN) {
-            // In dry-run mode, try to extract channel ID from URL or generate a placeholder
-            const match = url.match(/channel\/(UC[\w-]+)/);
-            if (match) {
-                resolve(match[1]);
-                return;
-            }
-            // Generate a deterministic fake ID from the URL
-            resolve('UC_DRYRUN_' + Buffer.from(url).toString('base64').slice(0, 16));
+            const idMatch = url.match(/channel\/(UC[\w-]+)/);
+            const nameMatch = url.match(/@([\w-]+)/) || url.match(/channel\/([\w-]+)/);
+            resolve({
+                channelId: idMatch ? idMatch[1] : 'UC_DRYRUN_' + Buffer.from(url).toString('base64').slice(0, 16),
+                channelName: nameMatch ? nameMatch[1] : 'Unknown Channel',
+            });
             return;
         }
-        console.log(`[API] Spawning: ${YT_DLP} --print channel_id --playlist-items 1 --no-download ${url}`);
-        const child = execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
+        // Single yt-dlp call: prints channel_id on line 1, channel name on line 2
+        console.log(`[API] Resolving channel: ${url}`);
+        execFile(YT_DLP, ['--print', 'channel_id', '--print', 'channel', '--playlist-items', '1', '--no-download', url], {
             timeout: 60_000,
             env: childEnv,
             shell: true,
         }, (error, stdout, stderr) => {
             if (error) {
-                console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: error.code, signal: error.signal, killed: error.killed });
-                reject(new Error(`Failed to resolve channel ID: ${stderr || error.message}`));
+                console.error('[API] yt-dlp channel error:', { message: error.message, stderr, code: error.code, signal: error.signal, killed: error.killed });
+                reject(new Error(`Failed to resolve channel: ${stderr || error.message}`));
                 return;
             }
-            const channelId = stdout.trim();
+            const lines = stdout.trim().split('\n');
+            const channelId = lines[0]?.trim();
+            const channelName = lines[1]?.trim() || 'Unknown Channel';
             if (!channelId) {
                 reject(new Error('Could not resolve channel ID'));
                 return;
             }
-            resolve(channelId);
-        });
-    });
-}
-function resolveChannelName(url) {
-    return new Promise((resolve, reject) => {
-        const DRY_RUN = process.env.DRY_RUN === 'true';
-        if (DRY_RUN) {
-            // Extract a name from the URL for dry-run mode
-            const match = url.match(/@([\w-]+)/) || url.match(/channel\/([\w-]+)/);
-            resolve(match ? match[1] : 'Unknown Channel');
-            return;
-        }
-        execFile(YT_DLP, ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
-            timeout: 30_000,
-            env: childEnv,
-            shell: true,
-        }, (error, stdout, stderr) => {
-            if (error) {
-                reject(new Error(`Failed to resolve channel name: ${stderr || error.message}`));
-                return;
-            }
-            resolve(stdout.trim() || 'Unknown Channel');
+            console.log(`[API] Resolved: ${channelName} (${channelId})`);
+            resolve({ channelId, channelName });
         });
     });
 }
@@ -199,7 +178,7 @@ function resolveVideoId(url) {
             return;
         }
         execFile(YT_DLP, ['--print', 'id', '--no-download', url], {
-            timeout: 30_000,
+            timeout: 60_000,
             env: childEnv,
             shell: true,
         }, (error, stdout, stderr) => {
@@ -219,7 +198,7 @@ function resolveVideoTitle(url) {
             return;
         }
         execFile(YT_DLP, ['--print', 'title', '--no-download', url], {
-            timeout: 30_000,
+            timeout: 60_000,
             env: childEnv,
             shell: true,
         }, (error, stdout, stderr) => {
