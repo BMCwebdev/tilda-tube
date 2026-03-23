@@ -1,5 +1,6 @@
 import { execFile } from 'child_process';
 import { getApprovedVideos, updateVideoStatus } from './db.js';
+import { childEnv } from './env.js';
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
 let isDownloading = false;
@@ -65,7 +66,7 @@ function downloadVideo(youtubeId) {
             '-o', outputTemplate,
             url,
         ];
-        execFile('yt-dlp', args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+        execFile('yt-dlp', args, { maxBuffer: 10 * 1024 * 1024, env: childEnv }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(stderr || error.message));
                 return;
