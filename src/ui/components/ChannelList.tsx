@@ -19,19 +19,6 @@ interface Props {
 
 type DatePreset = '6months' | '1year' | '2years' | 'all' | 'custom';
 
-function getPresetFromDate(fromDate: string): DatePreset {
-  const from = new Date(fromDate);
-  const now = new Date();
-  const diffMs = now.getTime() - from.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  if (diffDays < 200) return '6months';
-  if (diffDays < 400) return '1year';
-  if (diffDays < 800) return '2years';
-  if (from.getFullYear() <= 2006) return 'all';
-  return 'custom';
-}
-
 function getDateFromPreset(preset: DatePreset): string {
   const now = new Date();
   switch (preset) {
@@ -56,7 +43,7 @@ function EditChannelForm({ channel, onSave, onCancel }: {
   onSave: () => void;
   onCancel: () => void;
 }) {
-  const [datePreset, setDatePreset] = useState<DatePreset>(getPresetFromDate(channel.from_date));
+  const [datePreset, setDatePreset] = useState<DatePreset>('custom');
   const [customDate, setCustomDate] = useState(channel.from_date);
   const [autoApprove, setAutoApprove] = useState(!!channel.auto_approve);
   const [minDuration, setMinDuration] = useState(channel.min_duration ?? 120);
