@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
-import { getApprovedVideos, updateVideoStatus, type Video } from './db.js';
+import { getApprovedVideos, updateVideoStatus, getChannelById, type Video } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
+import { writeNfo } from './nfo.js';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
@@ -45,6 +46,15 @@ async function downloadOne(video: Video): Promise<void> {
     } else {
       const filePath = await downloadVideo(video.youtube_id);
       updateVideoStatus(video.id, 'done', { file_path: filePath });
+
+      // Generate Plex NFO file for collection grouping
+      if (video.channel_id) {
+        const channel = getChannelById(video.channel_id);
+        if (channel) {
+          writeNfo(filePath, channel.name, video.title, video.published_at);
+        }
+      }
+
       console.log(`[Downloader] Completed: "${video.title}"`);
     }
   } catch (err: any) {

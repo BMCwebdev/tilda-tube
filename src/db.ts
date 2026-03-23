@@ -106,6 +106,27 @@ export function getChannelById(id: number): Channel | undefined {
   return db.prepare('SELECT * FROM channels WHERE id = ?').get(id) as Channel | undefined;
 }
 
+export function updateChannel(id: number, data: { from_date?: string; auto_approve?: boolean }): boolean {
+  const db = getDb();
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (data.from_date !== undefined) {
+    sets.push('from_date = ?');
+    params.push(data.from_date);
+  }
+  if (data.auto_approve !== undefined) {
+    sets.push('auto_approve = ?');
+    params.push(data.auto_approve ? 1 : 0);
+  }
+
+  if (sets.length === 0) return false;
+
+  params.push(id);
+  const result = db.prepare(`UPDATE channels SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  return result.changes > 0;
+}
+
 // --- Video queries ---
 
 export interface Video {
@@ -210,6 +231,21 @@ export function updateVideoStatus(
 export function getVideoById(id: number): Video | undefined {
   const db = getDb();
   return db.prepare('SELECT * FROM videos WHERE id = ?').get(id) as Video | undefined;
+}
+
+export function getDownloadedVideosWithChannel(): Array<{
+  file_path: string | null;
+  title: string;
+  channel_name: string | null;
+  published_at: string;
+}> {
+  const db = getDb();
+  return db.prepare(`
+    SELECT v.file_path, v.title, c.name as channel_name, v.published_at
+    FROM videos v
+    LEFT JOIN channels c ON v.channel_id = c.id
+    WHERE v.status = 'done' AND v.file_path IS NOT NULL
+  `).all() as any[];
 }
 
 export function getServerStatus(): {

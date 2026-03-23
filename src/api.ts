@@ -5,6 +5,8 @@ import {
   getAllChannels,
   addChannel,
   deleteChannel,
+  updateChannel,
+  getChannelById,
   getPendingVideos,
   getAllVideos,
   getVideoById,
@@ -52,6 +54,29 @@ router.post('/api/channels', async (req: Request, res: Response) => {
     console.error('[API] Error adding channel:', err);
     res.status(500).json({ error: err.message || 'Failed to add channel' });
   }
+});
+
+router.patch('/api/channels/:id', (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid channel ID' });
+    return;
+  }
+
+  const { fromDate, autoApprove } = req.body;
+  const updates: { from_date?: string; auto_approve?: boolean } = {};
+
+  if (fromDate !== undefined) updates.from_date = fromDate;
+  if (autoApprove !== undefined) updates.auto_approve = autoApprove;
+
+  const updated = updateChannel(id, updates);
+  if (!updated) {
+    res.status(404).json({ error: 'Channel not found' });
+    return;
+  }
+
+  const channel = getChannelById(id);
+  res.json(channel);
 });
 
 router.delete('/api/channels/:id', (req: Request, res: Response) => {

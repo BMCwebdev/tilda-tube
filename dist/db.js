@@ -71,6 +71,24 @@ export function getChannelById(id) {
     const db = getDb();
     return db.prepare('SELECT * FROM channels WHERE id = ?').get(id);
 }
+export function updateChannel(id, data) {
+    const db = getDb();
+    const sets = [];
+    const params = [];
+    if (data.from_date !== undefined) {
+        sets.push('from_date = ?');
+        params.push(data.from_date);
+    }
+    if (data.auto_approve !== undefined) {
+        sets.push('auto_approve = ?');
+        params.push(data.auto_approve ? 1 : 0);
+    }
+    if (sets.length === 0)
+        return false;
+    params.push(id);
+    const result = db.prepare(`UPDATE channels SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    return result.changes > 0;
+}
 export function getPendingVideos() {
     const db = getDb();
     return db.prepare(`
@@ -137,6 +155,15 @@ export function updateVideoStatus(id, status, extra) {
 export function getVideoById(id) {
     const db = getDb();
     return db.prepare('SELECT * FROM videos WHERE id = ?').get(id);
+}
+export function getDownloadedVideosWithChannel() {
+    const db = getDb();
+    return db.prepare(`
+    SELECT v.file_path, v.title, c.name as channel_name, v.published_at
+    FROM videos v
+    LEFT JOIN channels c ON v.channel_id = c.id
+    WHERE v.status = 'done' AND v.file_path IS NOT NULL
+  `).all();
 }
 export function getServerStatus() {
     const db = getDb();

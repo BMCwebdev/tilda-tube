@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { execFile } from 'child_process';
 import { childEnv, YT_DLP } from './env.js';
-import { getAllChannels, addChannel, deleteChannel, getPendingVideos, getAllVideos, getVideoById, updateVideoStatus, insertVideo, getServerStatus, } from './db.js';
+import { getAllChannels, addChannel, deleteChannel, updateChannel, getChannelById, getPendingVideos, getAllVideos, getVideoById, updateVideoStatus, insertVideo, getServerStatus, } from './db.js';
 import { downloadAllApproved } from './downloader.js';
 export const router = Router();
 // --- Channels ---
@@ -35,6 +35,26 @@ router.post('/api/channels', async (req, res) => {
         console.error('[API] Error adding channel:', err);
         res.status(500).json({ error: err.message || 'Failed to add channel' });
     }
+});
+router.patch('/api/channels/:id', (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+        res.status(400).json({ error: 'Invalid channel ID' });
+        return;
+    }
+    const { fromDate, autoApprove } = req.body;
+    const updates = {};
+    if (fromDate !== undefined)
+        updates.from_date = fromDate;
+    if (autoApprove !== undefined)
+        updates.auto_approve = autoApprove;
+    const updated = updateChannel(id, updates);
+    if (!updated) {
+        res.status(404).json({ error: 'Channel not found' });
+        return;
+    }
+    const channel = getChannelById(id);
+    res.json(channel);
 });
 router.delete('/api/channels/:id', (req, res) => {
     const id = parseInt(req.params.id, 10);

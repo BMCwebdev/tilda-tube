@@ -4,13 +4,36 @@ interface Props {
   onAdded: () => void;
 }
 
+type DatePreset = '6months' | '1year' | '2years' | 'all' | 'custom';
+
+function getDateFromPreset(preset: DatePreset): string {
+  const now = new Date();
+  switch (preset) {
+    case '6months':
+      now.setMonth(now.getMonth() - 6);
+      return now.toISOString().split('T')[0];
+    case '1year':
+      now.setFullYear(now.getFullYear() - 1);
+      return now.toISOString().split('T')[0];
+    case '2years':
+      now.setFullYear(now.getFullYear() - 2);
+      return now.toISOString().split('T')[0];
+    case 'all':
+      return '2005-01-01';
+    case 'custom':
+      return now.toISOString().split('T')[0];
+  }
+}
+
 export function AddChannelForm({ onAdded }: Props) {
-  const today = new Date().toISOString().split('T')[0];
   const [url, setUrl] = useState('');
-  const [fromDate, setFromDate] = useState(today);
+  const [datePreset, setDatePreset] = useState<DatePreset>('1year');
+  const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
   const [autoApprove, setAutoApprove] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const fromDate = datePreset === 'custom' ? customDate : getDateFromPreset(datePreset);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +71,17 @@ export function AddChannelForm({ onAdded }: Props) {
     width: '100%',
   };
 
+  const presetButtonStyle = (active: boolean): React.CSSProperties => ({
+    padding: '6px 12px',
+    border: active ? '2px solid #2563eb' : '1px solid #ddd',
+    borderRadius: 6,
+    background: active ? '#eff6ff' : '#fff',
+    color: active ? '#2563eb' : '#333',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: active ? 600 : 400,
+  });
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -76,31 +110,48 @@ export function AddChannelForm({ onAdded }: Props) {
         />
       </div>
 
-      <div style={{ display: 'flex', gap: 16 }}>
-        <div style={{ flex: 1 }}>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-            Download videos from
-          </label>
+      <div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+          Download videos from
+        </label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setDatePreset('6months')} style={presetButtonStyle(datePreset === '6months')}>
+            Last 6 months
+          </button>
+          <button type="button" onClick={() => setDatePreset('1year')} style={presetButtonStyle(datePreset === '1year')}>
+            Last year
+          </button>
+          <button type="button" onClick={() => setDatePreset('2years')} style={presetButtonStyle(datePreset === '2years')}>
+            Last 2 years
+          </button>
+          <button type="button" onClick={() => setDatePreset('all')} style={presetButtonStyle(datePreset === 'all')}>
+            All time
+          </button>
+          <button type="button" onClick={() => setDatePreset('custom')} style={presetButtonStyle(datePreset === 'custom')}>
+            Custom date
+          </button>
+        </div>
+        {datePreset === 'custom' && (
           <input
             type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            style={inputStyle}
+            value={customDate}
+            onChange={(e) => setCustomDate(e.target.value)}
+            style={{ ...inputStyle, marginTop: 8, width: 'auto' }}
             required
           />
-        </div>
+        )}
+      </div>
 
-        <div style={{ display: 'flex', alignItems: 'end', paddingBottom: 4 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={autoApprove}
-              onChange={(e) => setAutoApprove(e.target.checked)}
-              style={{ width: 18, height: 18 }}
-            />
-            Auto-approve
-          </label>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={autoApprove}
+            onChange={(e) => setAutoApprove(e.target.checked)}
+            style={{ width: 18, height: 18 }}
+          />
+          Auto-approve
+        </label>
       </div>
 
       {error && (

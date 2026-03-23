@@ -23,6 +23,10 @@ export declare function addChannel(data: {
 }): Channel;
 export declare function deleteChannel(id: number): boolean;
 export declare function getChannelById(id: number): Channel | undefined;
+export declare function updateChannel(id: number, data: {
+    from_date?: string;
+    auto_approve?: boolean;
+}): boolean;
 export interface Video {
     id: number;
     channel_id: number | null;
@@ -56,6 +60,12 @@ export declare function updateVideoStatus(id: number, status: string, extra?: {
     error_message?: string;
 }): boolean;
 export declare function getVideoById(id: number): Video | undefined;
+export declare function getDownloadedVideosWithChannel(): Array<{
+    file_path: string | null;
+    title: string;
+    channel_name: string | null;
+    published_at: string;
+}>;
 export declare function getServerStatus(): {
     channelCount: number;
     pendingCount: number;
