@@ -31,6 +31,7 @@ export function AddChannelForm({ onAdded }: Props) {
   const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
   const [autoApprove, setAutoApprove] = useState(false);
   const [minDuration, setMinDuration] = useState(120);
+  const [maxQuality, setMaxQuality] = useState(720);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -47,7 +48,7 @@ export function AddChannelForm({ onAdded }: Props) {
       const res = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), fromDate, autoApprove, minDuration }),
+        body: JSON.stringify({ url: url.trim(), fromDate, autoApprove, minDuration, maxQuality }),
       });
 
       if (!res.ok) {
@@ -172,6 +173,25 @@ export function AddChannelForm({ onAdded }: Props) {
             <option value={120}>2 minutes</option>
             <option value={180}>3 minutes</option>
             <option value={300}>5 minutes</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Quality</label>
+          <select
+            value={maxQuality}
+            onChange={(e) => setMaxQuality(Number(e.target.value))}
+            style={{
+              padding: '6px 10px',
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              fontSize: 13,
+              background: '#fff',
+            }}
+          >
+            <option value={480}>480p</option>
+            <option value={720}>720p</option>
+            <option value={1080}>1080p</option>
           </select>
         </div>
       </div>

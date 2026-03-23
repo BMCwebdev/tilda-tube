@@ -11,7 +11,7 @@ router.get('/api/channels', (_req, res) => {
     res.json(channels);
 });
 router.post('/api/channels', async (req, res) => {
-    const { url, fromDate, autoApprove, minDuration } = req.body;
+    const { url, fromDate, autoApprove, minDuration, maxQuality } = req.body;
     if (!url || !fromDate) {
         res.status(400).json({ error: 'url and fromDate are required' });
         return;
@@ -26,6 +26,7 @@ router.post('/api/channels', async (req, res) => {
             from_date: fromDate,
             auto_approve: !!autoApprove,
             min_duration: minDuration !== undefined ? Number(minDuration) : undefined,
+            max_quality: maxQuality !== undefined ? Number(maxQuality) : undefined,
         });
         res.status(201).json(channel);
         // Run full backfill in the background (gets ALL videos, not just RSS ~15)
@@ -48,7 +49,7 @@ router.patch('/api/channels/:id', (req, res) => {
         res.status(400).json({ error: 'Invalid channel ID' });
         return;
     }
-    const { fromDate, autoApprove, minDuration } = req.body;
+    const { fromDate, autoApprove, minDuration, maxQuality } = req.body;
     const updates = {};
     if (fromDate !== undefined)
         updates.from_date = fromDate;
@@ -56,6 +57,8 @@ router.patch('/api/channels/:id', (req, res) => {
         updates.auto_approve = autoApprove;
     if (minDuration !== undefined)
         updates.min_duration = Number(minDuration);
+    if (maxQuality !== undefined)
+        updates.max_quality = Number(maxQuality);
     const updated = updateChannel(id, updates);
     if (!updated) {
         res.status(404).json({ error: 'Channel not found' });
@@ -87,7 +90,7 @@ router.get('/api/videos', (_req, res) => {
     res.json(videos);
 });
 router.post('/api/videos', async (req, res) => {
-    const { url } = req.body;
+    const { url, maxQuality } = req.body;
     if (!url) {
         res.status(400).json({ error: 'url is required' });
         return;
@@ -102,6 +105,7 @@ router.post('/api/videos', async (req, res) => {
             thumbnail_url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
             published_at: new Date().toISOString(),
             status: 'pending',
+            max_quality: maxQuality !== undefined ? Number(maxQuality) : null,
         });
         if (!video) {
             res.status(409).json({ error: 'Video already exists' });

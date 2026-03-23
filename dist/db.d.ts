@@ -8,6 +8,7 @@ export interface Channel {
     from_date: string;
     auto_approve: number;
     min_duration: number;
+    max_quality: number;
     created_at: string;
 }
 export interface ChannelWithCounts extends Channel {
@@ -22,6 +23,7 @@ export declare function addChannel(data: {
     from_date: string;
     auto_approve: boolean;
     min_duration?: number;
+    max_quality?: number;
 }): Channel;
 export declare function deleteChannel(id: number): boolean;
 export declare function getChannelById(id: number): Channel | undefined;
@@ -29,6 +31,7 @@ export declare function updateChannel(id: number, data: {
     from_date?: string;
     auto_approve?: boolean;
     min_duration?: number;
+    max_quality?: number;
 }): boolean;
 export interface Video {
     id: number;
@@ -38,6 +41,7 @@ export interface Video {
     thumbnail_url: string | null;
     published_at: string;
     status: string;
+    max_quality: number | null;
     file_path: string | null;
     error_message: string | null;
     created_at: string;
@@ -56,6 +60,7 @@ export declare function insertVideo(data: {
     thumbnail_url: string | null;
     published_at: string;
     status: string;
+    max_quality?: number | null;
 }): Video | null;
 export declare function videoExists(youtubeId: string): boolean;
 export declare function updateVideoStatus(id: number, status: string, extra?: {

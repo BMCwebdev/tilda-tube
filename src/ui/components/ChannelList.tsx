@@ -9,6 +9,7 @@ interface Channel {
   from_date: string;
   auto_approve: number;
   min_duration: number;
+  max_quality: number;
   video_count: number;
   pending_count: number;
 }
@@ -47,6 +48,7 @@ function EditChannelForm({ channel, onSave, onCancel }: {
   const [customDate, setCustomDate] = useState(channel.from_date);
   const [autoApprove, setAutoApprove] = useState(!!channel.auto_approve);
   const [minDuration, setMinDuration] = useState(channel.min_duration ?? 120);
+  const [maxQuality, setMaxQuality] = useState(channel.max_quality ?? 720);
   const [saving, setSaving] = useState(false);
 
   const fromDate = datePreset === 'custom' ? customDate : getDateFromPreset(datePreset);
@@ -57,7 +59,7 @@ function EditChannelForm({ channel, onSave, onCancel }: {
       await fetch(`/api/channels/${channel.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromDate, autoApprove, minDuration }),
+        body: JSON.stringify({ fromDate, autoApprove, minDuration, maxQuality }),
       });
       onSave();
     } catch (err) {
@@ -152,6 +154,25 @@ function EditChannelForm({ channel, onSave, onCancel }: {
             <option value={120}>2 minutes</option>
             <option value={180}>3 minutes</option>
             <option value={300}>5 minutes</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Quality</label>
+          <select
+            value={maxQuality}
+            onChange={(e) => setMaxQuality(Number(e.target.value))}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              fontSize: 12,
+              background: '#fff',
+            }}
+          >
+            <option value={480}>480p</option>
+            <option value={720}>720p</option>
+            <option value={1080}>1080p</option>
           </select>
         </div>
       </div>
@@ -279,6 +300,7 @@ export function ChannelList({ onAction }: Props) {
                   {ch.pending_count > 0 && `(${ch.pending_count} pending)`} &middot;{' '}
                   {ch.auto_approve ? 'Auto-approve' : 'Manual review'}
                   {ch.min_duration > 0 && ` · Min ${Math.floor(ch.min_duration / 60)}m`}
+                  {` · ${ch.max_quality || 720}p`}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>

@@ -18,6 +18,7 @@ export function ApprovalQueue({ onAction }: Props) {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<number | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [videoQuality, setVideoQuality] = useState(720);
   const [addingVideo, setAddingVideo] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -61,7 +62,7 @@ export function ApprovalQueue({ onAction }: Props) {
       const res = await fetch('/api/videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: videoUrl.trim() }),
+        body: JSON.stringify({ url: videoUrl.trim(), maxQuality: videoQuality }),
       });
 
       if (!res.ok) {
@@ -111,6 +112,21 @@ export function ApprovalQueue({ onAction }: Props) {
             fontSize: 14,
           }}
         />
+        <select
+          value={videoQuality}
+          onChange={(e) => setVideoQuality(Number(e.target.value))}
+          style={{
+            padding: '8px 10px',
+            border: '1px solid #ddd',
+            borderRadius: 6,
+            fontSize: 13,
+            background: '#fff',
+          }}
+        >
+          <option value={480}>480p</option>
+          <option value={720}>720p</option>
+          <option value={1080}>1080p</option>
+        </select>
         <button
           type="submit"
           disabled={addingVideo}

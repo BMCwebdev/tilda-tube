@@ -29,6 +29,7 @@ export function getDb(): Database.Database {
       from_date TEXT NOT NULL,
       auto_approve INTEGER NOT NULL DEFAULT 0,
       min_duration INTEGER NOT NULL DEFAULT 120,
+      max_quality INTEGER NOT NULL DEFAULT 720,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -40,6 +41,7 @@ export function getDb(): Database.Database {
       thumbnail_url TEXT,
       published_at TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
+      max_quality INTEGER,
       file_path TEXT,
       error_message TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -48,10 +50,20 @@ export function getDb(): Database.Database {
   `);
 
   // Migrations for existing databases
-  const columns = db.prepare("PRAGMA table_info(channels)").all() as any[];
-  if (!columns.find((c: any) => c.name === 'min_duration')) {
+  const channelCols = db.prepare("PRAGMA table_info(channels)").all() as any[];
+  if (!channelCols.find((c: any) => c.name === 'min_duration')) {
     db.exec("ALTER TABLE channels ADD COLUMN min_duration INTEGER NOT NULL DEFAULT 120");
     console.log('[DB] Added min_duration column to channels');
+  }
+  if (!channelCols.find((c: any) => c.name === 'max_quality')) {
+    db.exec("ALTER TABLE channels ADD COLUMN max_quality INTEGER NOT NULL DEFAULT 720");
+    console.log('[DB] Added max_quality column to channels');
+  }
+
+  const videoCols = db.prepare("PRAGMA table_info(videos)").all() as any[];
+  if (!videoCols.find((c: any) => c.name === 'max_quality')) {
+    db.exec("ALTER TABLE videos ADD COLUMN max_quality INTEGER");
+    console.log('[DB] Added max_quality column to videos');
   }
 
   return db;
@@ -67,6 +79,7 @@ export interface Channel {
   from_date: string;
   auto_approve: number;
   min_duration: number;
+  max_quality: number;
   created_at: string;
 }
 
@@ -95,13 +108,15 @@ export function addChannel(data: {
   from_date: string;
   auto_approve: boolean;
   min_duration?: number;
+  max_quality?: number;
 }): Channel {
   const db = getDb();
   const minDur = data.min_duration ?? 120;
+  const maxQual = data.max_quality ?? 720;
   const result = db.prepare(`
-    INSERT INTO channels (name, channel_id, channel_url, from_date, auto_approve, min_duration)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(data.name, data.channel_id, data.channel_url, data.from_date, data.auto_approve ? 1 : 0, minDur);
+    INSERT INTO channels (name, channel_id, channel_url, from_date, auto_approve, min_duration, max_quality)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(data.name, data.channel_id, data.channel_url, data.from_date, data.auto_approve ? 1 : 0, minDur, maxQual);
 
   return db.prepare('SELECT * FROM channels WHERE id = ?').get(result.lastInsertRowid) as Channel;
 }
@@ -117,7 +132,7 @@ export function getChannelById(id: number): Channel | undefined {
   return db.prepare('SELECT * FROM channels WHERE id = ?').get(id) as Channel | undefined;
 }
 
-export function updateChannel(id: number, data: { from_date?: string; auto_approve?: boolean; min_duration?: number }): boolean {
+export function updateChannel(id: number, data: { from_date?: string; auto_approve?: boolean; min_duration?: number; max_quality?: number }): boolean {
   const db = getDb();
   const sets: string[] = [];
   const params: any[] = [];
@@ -133,6 +148,10 @@ export function updateChannel(id: number, data: { from_date?: string; auto_appro
   if (data.min_duration !== undefined) {
     sets.push('min_duration = ?');
     params.push(data.min_duration);
+  }
+  if (data.max_quality !== undefined) {
+    sets.push('max_quality = ?');
+    params.push(data.max_quality);
   }
 
   if (sets.length === 0) return false;
@@ -152,6 +171,7 @@ export interface Video {
   thumbnail_url: string | null;
   published_at: string;
   status: string;
+  max_quality: number | null;
   file_path: string | null;
   error_message: string | null;
   created_at: string;
@@ -197,13 +217,14 @@ export function insertVideo(data: {
   thumbnail_url: string | null;
   published_at: string;
   status: string;
+  max_quality?: number | null;
 }): Video | null {
   const db = getDb();
   try {
     const result = db.prepare(`
-      INSERT INTO videos (channel_id, youtube_id, title, thumbnail_url, published_at, status)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(data.channel_id, data.youtube_id, data.title, data.thumbnail_url, data.published_at, data.status);
+      INSERT INTO videos (channel_id, youtube_id, title, thumbnail_url, published_at, status, max_quality)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(data.channel_id, data.youtube_id, data.title, data.thumbnail_url, data.published_at, data.status, data.max_quality ?? null);
     return db.prepare('SELECT * FROM videos WHERE id = ?').get(result.lastInsertRowid) as Video;
   } catch (e: any) {
     // UNIQUE constraint violation means video already exists

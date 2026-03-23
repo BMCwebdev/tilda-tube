@@ -56,7 +56,10 @@ async function downloadOne(video: Video, channel?: Channel): Promise<void> {
         }
       }
 
-      const filePath = await downloadVideo(video.youtube_id, isShort);
+      // Quality: video override (single videos) > channel setting > 720 default
+      const maxQuality = video.max_quality ?? channel?.max_quality ?? 720;
+
+      const filePath = await downloadVideo(video.youtube_id, isShort, maxQuality);
       updateVideoStatus(video.id, 'done', { file_path: filePath });
 
       // Generate Plex NFO file for collection grouping
@@ -96,7 +99,7 @@ function getVideoDuration(youtubeId: string): Promise<number | null> {
   });
 }
 
-function downloadVideo(youtubeId: string, isShort: boolean = false): Promise<string> {
+function downloadVideo(youtubeId: string, isShort: boolean = false, maxQuality: number = 720): Promise<string> {
   return new Promise((resolve, reject) => {
     // Shorts go into a Shorts/ subfolder, grouped by channel
     const baseDir = isShort ? `${MEDIA_DIR}/Shorts` : MEDIA_DIR;
@@ -104,7 +107,7 @@ function downloadVideo(youtubeId: string, isShort: boolean = false): Promise<str
     const url = `https://www.youtube.com/watch?v=${youtubeId}`;
 
     const args = [
-      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+      '--format', `bestvideo[height<=${maxQuality}]+bestaudio/best[height<=${maxQuality}]`,
       '--merge-output-format', 'mp4',
       '--write-thumbnail',
       '--convert-thumbnails', 'jpg',

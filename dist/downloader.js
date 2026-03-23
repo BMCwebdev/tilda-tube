@@ -51,7 +51,9 @@ async function downloadOne(video, channel) {
                     console.log(`[Downloader] Short video (${duration}s <= ${minDuration}s): "${video.title}"`);
                 }
             }
-            const filePath = await downloadVideo(video.youtube_id, isShort);
+            // Quality: video override (single videos) > channel setting > 720 default
+            const maxQuality = video.max_quality ?? channel?.max_quality ?? 720;
+            const filePath = await downloadVideo(video.youtube_id, isShort, maxQuality);
             updateVideoStatus(video.id, 'done', { file_path: filePath });
             // Generate Plex NFO file for collection grouping
             if (channel) {
@@ -88,14 +90,14 @@ function getVideoDuration(youtubeId) {
         });
     });
 }
-function downloadVideo(youtubeId, isShort = false) {
+function downloadVideo(youtubeId, isShort = false, maxQuality = 720) {
     return new Promise((resolve, reject) => {
         // Shorts go into a Shorts/ subfolder, grouped by channel
         const baseDir = isShort ? `${MEDIA_DIR}/Shorts` : MEDIA_DIR;
         const outputTemplate = `${baseDir}/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.%(ext)s`;
         const url = `https://www.youtube.com/watch?v=${youtubeId}`;
         const args = [
-            '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+            '--format', `bestvideo[height<=${maxQuality}]+bestaudio/best[height<=${maxQuality}]`,
             '--merge-output-format', 'mp4',
             '--write-thumbnail',
             '--convert-thumbnails', 'jpg',
