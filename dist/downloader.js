@@ -66,7 +66,7 @@ function downloadVideo(youtubeId) {
             '-o', outputTemplate,
             url,
         ];
-        execFile(YT_DLP, args, { maxBuffer: 10 * 1024 * 1024, env: childEnv, shell: true }, (error, stdout, stderr) => {
+        execFile(YT_DLP, args, { maxBuffer: 10 * 1024 * 1024, env: childEnv }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(stderr || error.message));
                 return;
