@@ -50,15 +50,26 @@ mkdir -p /Volumes/TildaTube/logs
 2. Install the macOS `.dmg` and sign in (free account is fine)
 3. Open Plex Web UI at `http://localhost:32400/web`
 
-### Configure a Home Videos library
+### Configure a Movies library
+
+> **Important:** The library type must be **Movies**, not "Home Videos" or "Other Videos". Only the Movies type reads NFO sidecar files, which is how TildaTube groups videos into channel collections.
 
 1. In Plex, click **+** next to "Libraries" in the sidebar
-2. Choose **Home Videos** as the library type (not Movies or TV Shows)
+2. Choose **Movies** as the library type
 3. Name it something like "Tilda's Videos"
 4. Click **Browse for media folder** and select `/Volumes/TildaTube/media`
-5. Click **Add Library**
+5. Click **Advanced** and set these options:
+   - **Agent**: Personal Media (not Plex Movie — that would try to match YouTube videos against movie databases)
+   - **Enable cinema trailers**: Off (these are real movie trailers, not useful here)
+   - **Use original titles**: Off (default)
+   - **Prefer artwork based on library language**: On (default)
+   - **Use local assets**: On (default — this is what reads our NFO files and embedded thumbnails)
+   - **Allow matching to explicit content**: Off (default — keep off for a kids library)
+   - **Enable video preview thumbnails**: Off (CPU-intensive hover-to-scrub previews; our actual thumbnail images still show up regardless)
+   - **Collections**: Show collections and their items (default — shows both channel groups and individual videos)
+6. Click **Add Library**
 
-Home Videos treats subfolders as collections, so each YouTube channel becomes a browsable folder in Plex. On Apple TV, your child opens the Plex app and sees channel folders with downloaded videos inside.
+Each YouTube channel appears as a Plex collection (via the `<set>` tag in NFO files). Short videos get their own "Shorts - ChannelName" collections. On Apple TV, your child opens the Plex app and sees channel collections with downloaded videos inside.
 
 ---
 
