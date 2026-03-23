@@ -183,13 +183,14 @@ function resolveChannelId(url: string): Promise<string> {
       return;
     }
 
-    execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
-      timeout: 30_000,
+    console.log(`[API] Spawning: ${YT_DLP} --print channel_id --playlist-items 1 --no-download ${url}`);
+    const child = execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
+      timeout: 60_000,
       env: childEnv,
       shell: true,
     }, (error, stdout, stderr) => {
       if (error) {
-        console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: (error as any).code });
+        console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: (error as any).code, signal: (error as any).signal, killed: (error as any).killed });
         reject(new Error(`Failed to resolve channel ID: ${stderr || error.message}`));
         return;
       }
