@@ -18,6 +18,10 @@
 - [x] Web UI accessible at `http://localhost:3001` on Mac Mini
 - [x] Web UI accessible at `http://192.168.0.76:3001` from iPhone and MacBook
 - [x] Prerequisites verified: Node v18.20.5, yt-dlp 2026.03.17, Deno 2.7.7, ffmpeg 8.1
+- [x] Fixed shell syntax error in downloader (`downloadVideo` was using `&&` outside shell context)
+- [x] YouTube channels added via web UI — RSS polling working for most channels
+- [x] Plex Media Server installed on Mac Mini and configured with library pointed at `/Volumes/TildaTube/media`
+- [x] Plex app installed on Apple TV
 
 ## Issues Encountered
 
@@ -30,7 +34,12 @@
 - **Likely cause:** The logs directory didn't exist when the service first tried to start, and launchd may have cached the failure
 - **Status:** UNRESOLVED — server works when run manually, but not via launchd
 
-### 3. IP address may not be stable
+### 3. Transient 404 on one YouTube channel feed
+- **Symptom:** One channel's RSS feed returned HTTP 404 during polling
+- **Likely cause:** YouTube intermittent issue — the channel exists and works in browser
+- **Status:** Monitoring — will likely resolve on its own on the next poll cycle
+
+### 4. IP address may not be stable
 - **Current IP:** `192.168.0.76`
 - **Risk:** Router could reassign a different IP after reboot
 - **Recommendation:** Set a DHCP reservation in the router for the Mac Mini's MAC address, or use `brians-mac-mini.local` (Bonjour)
@@ -55,11 +64,11 @@
 - Set DHCP reservation in router for `192.168.0.76`
 - Or confirm `brians-mac-mini.local` works reliably across devices
 
-### Install and configure Plex
-- Download Plex Media Server from plex.tv
-- Create a **Home Videos** library pointed at `/Volumes/TildaTube/media`
-- Install Plex app on Apple TV
-- Verify channel folders appear correctly
+### ~~Install and configure Plex~~ ✓ DONE
+- ~~Download Plex Media Server from plex.tv~~
+- ~~Create a library pointed at `/Volumes/TildaTube/media`~~
+- ~~Install Plex app on Apple TV~~
+- Verify channel folders appear correctly in Plex after first downloads
 
 ### Energy Saver settings
 - Set computer sleep to **Never**
