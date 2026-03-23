@@ -49,7 +49,10 @@ export function backfillNfoFiles(videos) {
             skipped++;
             continue;
         }
-        writeNfo(video.file_path, video.channel_name, video.title, video.published_at);
+        // Videos in the Shorts/ subfolder get a "Shorts - ChannelName" collection
+        const isShort = video.file_path.includes('/Shorts/');
+        const collectionName = isShort ? `Shorts - ${video.channel_name}` : video.channel_name;
+        writeNfo(video.file_path, collectionName, video.title, video.published_at);
         created++;
     }
     if (created > 0) {
