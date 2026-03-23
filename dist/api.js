@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { execFile } from 'child_process';
-import { childEnv } from './env.js';
+import { childEnv, YT_DLP } from './env.js';
 import { getAllChannels, addChannel, deleteChannel, getPendingVideos, getAllVideos, getVideoById, updateVideoStatus, insertVideo, getServerStatus, } from './db.js';
 import { downloadAllApproved } from './downloader.js';
 export const router = Router();
@@ -144,11 +144,12 @@ function resolveChannelId(url) {
             resolve('UC_DRYRUN_' + Buffer.from(url).toString('base64').slice(0, 16));
             return;
         }
-        execFile('yt-dlp', ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
+        execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
         }, (error, stdout, stderr) => {
             if (error) {
+                console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: error.code });
                 reject(new Error(`Failed to resolve channel ID: ${stderr || error.message}`));
                 return;
             }
@@ -170,7 +171,7 @@ function resolveChannelName(url) {
             resolve(match ? match[1] : 'Unknown Channel');
             return;
         }
-        execFile('yt-dlp', ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
+        execFile(YT_DLP, ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
         }, (error, stdout, stderr) => {
@@ -194,7 +195,7 @@ function resolveVideoId(url) {
             resolve('DRY' + Math.random().toString(36).slice(2, 10));
             return;
         }
-        execFile('yt-dlp', ['--print', 'id', '--no-download', url], {
+        execFile(YT_DLP, ['--print', 'id', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
         }, (error, stdout, stderr) => {
@@ -213,7 +214,7 @@ function resolveVideoTitle(url) {
             resolve('Dry Run Video');
             return;
         }
-        execFile('yt-dlp', ['--print', 'title', '--no-download', url], {
+        execFile(YT_DLP, ['--print', 'title', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
         }, (error, stdout, stderr) => {

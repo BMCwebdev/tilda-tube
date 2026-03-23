@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { execFile } from 'child_process';
-import { childEnv } from './env.js';
+import { childEnv, YT_DLP } from './env.js';
 import {
   getAllChannels,
   addChannel,
@@ -183,11 +183,12 @@ function resolveChannelId(url: string): Promise<string> {
       return;
     }
 
-    execFile('yt-dlp', ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
+    execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
     }, (error, stdout, stderr) => {
       if (error) {
+        console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: (error as any).code });
         reject(new Error(`Failed to resolve channel ID: ${stderr || error.message}`));
         return;
       }
@@ -211,7 +212,7 @@ function resolveChannelName(url: string): Promise<string> {
       return;
     }
 
-    execFile('yt-dlp', ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
+    execFile(YT_DLP, ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
     }, (error, stdout, stderr) => {
@@ -237,7 +238,7 @@ function resolveVideoId(url: string): Promise<string> {
       return;
     }
 
-    execFile('yt-dlp', ['--print', 'id', '--no-download', url], {
+    execFile(YT_DLP, ['--print', 'id', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
     }, (error, stdout, stderr) => {
@@ -258,7 +259,7 @@ function resolveVideoTitle(url: string): Promise<string> {
       return;
     }
 
-    execFile('yt-dlp', ['--print', 'title', '--no-download', url], {
+    execFile(YT_DLP, ['--print', 'title', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
     }, (error, stdout, stderr) => {
