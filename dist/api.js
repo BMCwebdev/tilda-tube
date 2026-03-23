@@ -147,6 +147,7 @@ function resolveChannelId(url) {
         execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
+            shell: true,
         }, (error, stdout, stderr) => {
             if (error) {
                 console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: error.code });
@@ -174,6 +175,7 @@ function resolveChannelName(url) {
         execFile(YT_DLP, ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
+            shell: true,
         }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(`Failed to resolve channel name: ${stderr || error.message}`));
@@ -198,6 +200,7 @@ function resolveVideoId(url) {
         execFile(YT_DLP, ['--print', 'id', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
+            shell: true,
         }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(`Failed to resolve video ID: ${stderr || error.message}`));
@@ -217,6 +220,7 @@ function resolveVideoTitle(url) {
         execFile(YT_DLP, ['--print', 'title', '--no-download', url], {
             timeout: 30_000,
             env: childEnv,
+            shell: true,
         }, (error, stdout, stderr) => {
             if (error) {
                 reject(new Error(`Failed to resolve video title: ${stderr || error.message}`));

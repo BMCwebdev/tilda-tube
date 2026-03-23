@@ -186,6 +186,7 @@ function resolveChannelId(url: string): Promise<string> {
     execFile(YT_DLP, ['--print', 'channel_id', '--playlist-items', '1', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
+      shell: true,
     }, (error, stdout, stderr) => {
       if (error) {
         console.error('[API] yt-dlp channel_id error:', { message: error.message, stderr, code: (error as any).code });
@@ -215,6 +216,7 @@ function resolveChannelName(url: string): Promise<string> {
     execFile(YT_DLP, ['--print', 'channel', '--playlist-items', '1', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
+      shell: true,
     }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`Failed to resolve channel name: ${stderr || error.message}`));
@@ -241,6 +243,7 @@ function resolveVideoId(url: string): Promise<string> {
     execFile(YT_DLP, ['--print', 'id', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
+      shell: true,
     }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`Failed to resolve video ID: ${stderr || error.message}`));
@@ -262,6 +265,7 @@ function resolveVideoTitle(url: string): Promise<string> {
     execFile(YT_DLP, ['--print', 'title', '--no-download', url], {
       timeout: 30_000,
       env: childEnv,
+      shell: true,
     }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`Failed to resolve video title: ${stderr || error.message}`));
