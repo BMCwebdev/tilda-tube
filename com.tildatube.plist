@@ -23,6 +23,10 @@
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>NODE_ENV</key>
         <string>production</string>
+        <!-- EDIT THIS: Set your Plex token for collection tagging -->
+        <!-- Find it: Plex Web UI → any media → Get Info → View XML → X-Plex-Token in URL -->
+        <key>PLEX_TOKEN</key>
+        <string>YOUR_PLEX_TOKEN_HERE</string>
     </dict>
 
     <key>RunAtLoad</key>

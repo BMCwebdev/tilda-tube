@@ -15,7 +15,8 @@ src/
   db.ts           — SQLite via better-sqlite3, schema migrations, all queries
   poller.ts       — RSS polling (daily) + yt-dlp full backfill (on channel add)
   downloader.ts   — Downloads approved videos via yt-dlp, handles Shorts routing
-  nfo.ts          — Generates Plex NFO files for collection grouping
+  plex.ts         — Plex API integration: collection tagging + backfill
+  nfo.ts          — NFO file generation (DISABLED — no Plex agent reads <set> tags yet)
   env.ts          — Shared child process env (PATH for Homebrew, yt-dlp path)
   ui/             — React SPA (Vite + React 18, no framework)
     App.tsx        — Main app with tab navigation (Queue, Channels, Library)
@@ -31,7 +32,8 @@ src/
 - **Video lifecycle**: `pending` → `approved` → `downloading` → `done` (or `rejected`/`error`)
 - **Channels** have `auto_approve` (skip the queue) and `min_duration` (shorts threshold)
 - **Shorts**: Videos shorter than a channel's `min_duration` download into `MEDIA_DIR/Shorts/ChannelName/` with NFO collection "Shorts - ChannelName". Full-length videos go to `MEDIA_DIR/ChannelName/`.
-- **NFO files**: Plex-compatible XML sidecar files placed next to each video. They set the `<set>` (collection) tag so Plex groups videos by channel. The backfill function on startup creates NFOs for any videos missing them, and detects Shorts by checking if the file path contains `/Shorts/`.
+- **Plex collections**: After downloading a video, `plex.ts` calls the Plex API to tag it with a collection matching the channel name (or "Shorts - ChannelName"). Requires `PLEX_TOKEN` env var. On startup, `backfillPlexCollections()` tags any existing videos not yet in a collection.
+- **NFO files (disabled)**: `nfo.ts` generates Plex-compatible NFO sidecar files with `<set>` tags. Currently commented out because no built-in Plex agent reads these for collections. Kept in the codebase — Plex is developing an official NFO agent that may support this in the future.
 - **Single videos**: Added via the Queue UI (or `POST /api/videos`), have `channel_id: null`, no duration filter applied.
 - **Polling vs backfill**: Daily RSS polling catches the ~15 most recent uploads (lightweight). On channel add, `backfillChannel()` runs yt-dlp `--flat-playlist` to discover ALL videos back to the `from_date` — this is slower but comprehensive. Duplicates are prevented by the `youtube_id` UNIQUE constraint.
 

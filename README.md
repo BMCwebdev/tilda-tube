@@ -88,10 +88,26 @@ npm install --production
 
 ### Configure the launchd service
 
-Edit `com.tildatube.plist` — you need to change **two things**:
+Edit `com.tildatube.plist` — you need to change **three things**:
 
 1. Replace `/Users/USERNAME/` with your actual macOS username (appears 2 times)
 2. Verify the node path — run `which node` and update if different from `/usr/local/bin/node`
+3. Set `PLEX_TOKEN` to your Plex authentication token (see below)
+
+#### Finding your Plex token
+
+1. Open Plex Web UI (`http://localhost:32400/web`)
+2. Navigate to any media item and click **Get Info**
+3. Click **View XML** (the `</>` icon)
+4. In the URL bar, find the `X-Plex-Token=XXXXX` parameter — that's your token
+
+Replace `YOUR_PLEX_TOKEN_HERE` in the plist with this value. The token is used to tag videos with channel-name collections via the Plex API after download.
+
+If running manually instead of via launchd, set the env var:
+
+```bash
+PLEX_TOKEN=your_token_here node dist/server.js
+```
 
 Then install the service:
 
