@@ -46,34 +46,61 @@ async function downloadOne(video: Video, channel?: Channel): Promise<void> {
       updateVideoStatus(video.id, 'done', { file_path: fakePath });
       console.log(`[Downloader] DRY_RUN: Marked "${video.title}" as done`);
     } else {
-      const filePath = await downloadVideo(video.youtube_id, minDuration);
+      // Check if this is a "short" video that should go in the Shorts collection
+      let isShort = false;
+      if (minDuration > 0) {
+        const duration = await getVideoDuration(video.youtube_id);
+        if (duration !== null && duration <= minDuration) {
+          isShort = true;
+          console.log(`[Downloader] Short video (${duration}s <= ${minDuration}s): "${video.title}"`);
+        }
+      }
+
+      const filePath = await downloadVideo(video.youtube_id, isShort);
       updateVideoStatus(video.id, 'done', { file_path: filePath });
 
       // Generate Plex NFO file for collection grouping
       if (channel) {
-        writeNfo(filePath, channel.name, video.title, video.published_at);
+        const collectionName = isShort ? `Shorts - ${channel.name}` : channel.name;
+        writeNfo(filePath, collectionName, video.title, video.published_at);
       }
 
-      console.log(`[Downloader] Completed: "${video.title}"`);
+      console.log(`[Downloader] Completed${isShort ? ' (short)' : ''}: "${video.title}"`);
     }
   } catch (err: any) {
     const errorMsg = err.message || String(err);
-
-    // yt-dlp match-filter rejection — mark as rejected, not error
-    if (errorMsg.includes('does not pass filter')) {
-      console.log(`[Downloader] Skipped (too short): "${video.title}"`);
-      updateVideoStatus(video.id, 'rejected', { error_message: 'Too short (duration filter)' });
-      return;
-    }
-
     console.error(`[Downloader] Failed: "${video.title}" — ${errorMsg}`);
     updateVideoStatus(video.id, 'error', { error_message: errorMsg });
   }
 }
 
-function downloadVideo(youtubeId: string, minDuration: number = 0): Promise<string> {
+/**
+ * Get the duration of a YouTube video in seconds.
+ * Returns null if duration can't be determined.
+ */
+function getVideoDuration(youtubeId: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = `https://www.youtube.com/watch?v=${youtubeId}`;
+    execFile(YT_DLP, ['--print', 'duration', '--no-download', url], {
+      timeout: 60_000,
+      env: childEnv,
+    }, (error, stdout) => {
+      if (error) {
+        console.warn(`[Downloader] Could not get duration for ${youtubeId}, treating as full-length`);
+        resolve(null);
+        return;
+      }
+      const seconds = parseFloat(stdout.trim());
+      resolve(isNaN(seconds) ? null : seconds);
+    });
+  });
+}
+
+function downloadVideo(youtubeId: string, isShort: boolean = false): Promise<string> {
   return new Promise((resolve, reject) => {
-    const outputTemplate = `${MEDIA_DIR}/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.%(ext)s`;
+    // Shorts go into a Shorts/ subfolder, grouped by channel
+    const baseDir = isShort ? `${MEDIA_DIR}/Shorts` : MEDIA_DIR;
+    const outputTemplate = `${baseDir}/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.%(ext)s`;
     const url = `https://www.youtube.com/watch?v=${youtubeId}`;
 
     const args = [
@@ -86,13 +113,8 @@ function downloadVideo(youtubeId: string, minDuration: number = 0): Promise<stri
       '--no-playlist',
       '--print', 'after_move:filepath',
       '-o', outputTemplate,
+      url,
     ];
-
-    if (minDuration > 0) {
-      args.push('--match-filter', `duration > ${minDuration}`);
-    }
-
-    args.push(url);
 
     execFile(YT_DLP, args, { maxBuffer: 10 * 1024 * 1024, env: childEnv }, (error, stdout, stderr) => {
       if (error) {

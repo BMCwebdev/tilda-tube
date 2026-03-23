@@ -118,8 +118,9 @@ To keep the Mac Mini running 24/7:
 4. Set the **from date** — only videos published after this date will be considered
    - Default is today (only future uploads)
    - Set an earlier date to backfill existing videos
-5. Toggle **Auto-approve** if you trust all content from this channel
-6. Click **Add Channel**
+5. Set **Min length** — videos shorter than this go into a "Shorts" collection instead of the main library (default: 2 minutes, or "No filter" to treat all videos the same)
+6. Toggle **Auto-approve** if you trust all content from this channel
+7. Click **Add Channel**
 
 ### Approving videos
 
@@ -130,19 +131,24 @@ To keep the Mac Mini running 24/7:
 
 ### Adding a single video
 
-Use the API directly:
+On the **Queue** tab, paste a YouTube URL into the input bar at the top and click **Add Video**. The video appears in the queue for approval.
 
-```bash
-curl -X POST http://brians-mac-mini.local:3001/api/videos \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://youtube.com/watch?v=VIDEO_ID"}'
+### Shorts collection
+
+When a channel has a minimum length set (default 2 minutes), videos shorter than that threshold are still downloaded — they just go into a separate **Shorts** folder:
+
+```
+/Volumes/TildaTube/media/
+  Sesame Street/           ← full episodes
+  Shorts/
+    Sesame Street/         ← clips & shorts
 ```
 
-The video will appear in the Queue for approval.
+In Plex, shorts appear in their own "Shorts - ChannelName" collection, keeping the main library uncluttered while still making short clips available.
 
 ### What the child sees
 
-Open the **Plex** app on Apple TV. Videos are organized by channel name in the Home Videos library. No ads, no suggestions, no YouTube UI.
+Open the **Plex** app on Apple TV. Videos are organized by channel name in the Home Videos library. Shorts are separated into their own collections. No ads, no suggestions, no YouTube UI.
 
 ---
 
@@ -150,13 +156,27 @@ Open the **Plex** app on Apple TV. Videos are organized by channel name in the H
 
 When new code is pushed to GitHub:
 
+### If running as a launchd service
+
 ```bash
-cd tilda-tube
+cd ~/tilda-tube
 git pull
 npm install --production
 launchctl unload ~/Library/LaunchAgents/com.tildatube.plist
 launchctl load ~/Library/LaunchAgents/com.tildatube.plist
 ```
+
+### If running manually in a terminal
+
+```bash
+cd ~/tilda-tube
+git pull
+npm install --production
+npm run build
+node dist/server.js
+```
+
+> `npm run build` compiles TypeScript to `dist/`. The `dist/` folder is also committed to the repo, so on the Mac Mini you can skip the build if you haven't made local changes — `git pull` will bring in the pre-built files.
 
 ---
 
@@ -223,7 +243,7 @@ The `com.tildatube.plist` uses `/usr/local/bin` paths because it only runs on th
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/channels` | List all channels with video counts |
-| `POST` | `/api/channels` | Add a channel `{ url, fromDate, autoApprove }` |
+| `POST` | `/api/channels` | Add a channel `{ url, fromDate, autoApprove, minDuration }` |
 | `DELETE` | `/api/channels/:id` | Remove a channel |
 | `GET` | `/api/queue` | List pending videos |
 | `POST` | `/api/videos/:id/approve` | Approve a pending video |
