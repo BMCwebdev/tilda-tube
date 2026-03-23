@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { getApprovedVideos, updateVideoStatus, type Video } from './db.js';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
-const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TubeSafe/media';
+const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
 
 let isDownloading = false;
 

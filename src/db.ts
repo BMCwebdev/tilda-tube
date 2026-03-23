@@ -2,8 +2,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const DB_DIR = process.env.DB_DIR || '/Volumes/TubeSafe';
-const DB_PATH = path.join(DB_DIR, 'tubesafe.db');
+const DB_DIR = process.env.DB_DIR || '/Volumes/TildaTube';
+const DB_PATH = path.join(DB_DIR, 'tildatube.db');
 
 let db: Database.Database;
 

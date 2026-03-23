@@ -14,7 +14,7 @@ A self-hosted YouTube media server for kids. Parents curate a safe, ad-free libr
 
 ## Prerequisites
 
-This runs on a **Mac Mini (Intel)** with an external drive mounted at `/Volumes/TubeSafe`.
+This runs on a **Mac Mini (Intel)** with an external drive mounted at `/Volumes/TildaTube`.
 
 ### Install dependencies via Homebrew
 
@@ -38,8 +38,8 @@ ffmpeg -version   # 6.x+
 Create the required directories:
 
 ```bash
-mkdir -p /Volumes/TubeSafe/media
-mkdir -p /Volumes/TubeSafe/logs
+mkdir -p /Volumes/TildaTube/media
+mkdir -p /Volumes/TildaTube/logs
 ```
 
 ---
@@ -55,7 +55,7 @@ mkdir -p /Volumes/TubeSafe/logs
 1. In Plex, click **+** next to "Libraries" in the sidebar
 2. Choose **Home Videos** as the library type (not Movies or TV Shows)
 3. Name it something like "Tilda's Videos"
-4. Click **Browse for media folder** and select `/Volumes/TubeSafe/media`
+4. Click **Browse for media folder** and select `/Volumes/TildaTube/media`
 5. Click **Add Library**
 
 Home Videos treats subfolders as collections, so each YouTube channel becomes a browsable folder in Plex. On Apple TV, your child opens the Plex app and sees channel folders with downloaded videos inside.
@@ -188,8 +188,8 @@ launchctl list | grep tildatube
 ### View logs
 
 ```bash
-tail -f /Volumes/TubeSafe/logs/tildatube.out
-tail -f /Volumes/TubeSafe/logs/tildatube.err
+tail -f /Volumes/TildaTube/logs/tildatube.out
+tail -f /Volumes/TildaTube/logs/tildatube.err
 ```
 
 ### Test yt-dlp manually
@@ -203,8 +203,8 @@ If this fails, check that Deno is installed (`deno --version`) and on the PATH.
 ### Common issues
 
 - **"yt-dlp: error: unable to extract..."** — Deno may not be installed. Run `brew install deno`.
-- **Downloads fail silently** — Check `/Volumes/TubeSafe/logs/tildatube.err` for yt-dlp stderr output.
-- **External drive not mounted** — Ensure `/Volumes/TubeSafe` is mounted. The service will fail to start if the DB path is unavailable.
+- **Downloads fail silently** — Check `/Volumes/TildaTube/logs/tildatube.err` for yt-dlp stderr output.
+- **External drive not mounted** — Ensure `/Volumes/TildaTube` is mounted. The service will fail to start if the DB path is unavailable.
 - **Port conflict** — TildaTube runs on port 3001. Plex uses 32400. They should not conflict.
 
 ### Path differences (Intel vs Apple Silicon)

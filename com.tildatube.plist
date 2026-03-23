@@ -32,9 +32,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Volumes/TubeSafe/logs/tildatube.out</string>
+    <string>/Volumes/TildaTube/logs/tildatube.out</string>
 
     <key>StandardErrorPath</key>
-    <string>/Volumes/TubeSafe/logs/tildatube.err</string>
+    <string>/Volumes/TildaTube/logs/tildatube.err</string>
 </dict>
 </plist>
