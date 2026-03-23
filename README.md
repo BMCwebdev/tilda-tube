@@ -64,15 +64,16 @@ Home Videos treats subfolders as collections, so each YouTube channel becomes a 
 
 ## Setup TildaTube
 
-### Clone and build
+### Clone and install
 
 ```bash
 # On the Mac Mini
 git clone https://github.com/BMCwebdev/tilda-tube.git
 cd tilda-tube
-npm install
-npm run build
+npm install --production
 ```
+
+> The `dist/` folder is pre-built and committed to the repo, so no build step is needed on the Mac Mini.
 
 ### Configure the launchd service
 
@@ -152,8 +153,7 @@ When new code is pushed to GitHub:
 ```bash
 cd tilda-tube
 git pull
-npm install
-npm run build
+npm install --production
 launchctl unload ~/Library/LaunchAgents/com.tildatube.plist
 launchctl load ~/Library/LaunchAgents/com.tildatube.plist
 ```
