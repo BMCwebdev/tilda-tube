@@ -1,5 +1,7 @@
+import { execFile } from 'child_process';
 import { XMLParser } from 'fast-xml-parser';
 import { getAllChannels, videoExists, insertVideo, type Channel } from './db.js';
+import { childEnv, YT_DLP } from './env.js';
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -87,4 +89,99 @@ async function pollChannel(channel: Channel): Promise<void> {
   if (newCount > 0) {
     console.log(`[Poller] Found ${newCount} new video(s) for ${channel.name}`);
   }
+}
+
+/**
+ * Full backfill for a channel using yt-dlp playlist extraction.
+ * Gets ALL videos from a channel (not just the ~15 from RSS),
+ * filtered by the channel's from_date. Run once when a channel is added.
+ */
+export async function backfillChannel(channel: Channel): Promise<void> {
+  const DRY_RUN = process.env.DRY_RUN === 'true';
+  const fromDateCompact = channel.from_date.replace(/-/g, '');
+  const channelUrl = `https://www.youtube.com/channel/${channel.channel_id}`;
+
+  console.log(`[Backfill] Starting for ${channel.name} (videos after ${channel.from_date})...`);
+
+  if (DRY_RUN) {
+    console.log(`[Backfill] DRY_RUN: Skipping yt-dlp backfill for ${channel.name}`);
+    return;
+  }
+
+  const videos = await listChannelVideos(channelUrl, fromDateCompact);
+  let newCount = 0;
+
+  for (const video of videos) {
+    if (videoExists(video.id)) continue;
+
+    const status = channel.auto_approve ? 'approved' : 'pending';
+
+    insertVideo({
+      channel_id: channel.id,
+      youtube_id: video.id,
+      title: video.title,
+      thumbnail_url: `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`,
+      published_at: video.uploadDate,
+      status,
+    });
+
+    newCount++;
+    console.log(`[Backfill] New video: "${video.title}" [${status}]`);
+  }
+
+  console.log(`[Backfill] Done for ${channel.name}: ${newCount} new, ${videos.length - newCount} already known`);
+}
+
+interface PlaylistVideo {
+  id: string;
+  title: string;
+  uploadDate: string;  // ISO format: YYYY-MM-DD
+}
+
+function listChannelVideos(channelUrl: string, dateAfter: string): Promise<PlaylistVideo[]> {
+  return new Promise((resolve, reject) => {
+    // --flat-playlist gets metadata only (no download), much faster
+    // --print outputs one field per line: id, title, upload_date in sequence
+    const args = [
+      '--flat-playlist',
+      '--print', 'id',
+      '--print', 'title',
+      '--print', 'upload_date',
+      '--dateafter', dateAfter,
+      '--no-download',
+      channelUrl,
+    ];
+
+    execFile(YT_DLP, args, {
+      maxBuffer: 50 * 1024 * 1024,  // Large channels may have many videos
+      timeout: 5 * 60 * 1000,       // 5 minute timeout
+      env: childEnv,
+    }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`yt-dlp backfill failed: ${stderr || error.message}`));
+        return;
+      }
+
+      const lines = stdout.trim().split('\n').filter(Boolean);
+      const videos: PlaylistVideo[] = [];
+
+      // Every 3 lines is one video: id, title, upload_date
+      for (let i = 0; i + 2 < lines.length; i += 3) {
+        const id = lines[i].trim();
+        const title = lines[i + 1].trim();
+        const rawDate = lines[i + 2].trim();  // YYYYMMDD format
+
+        // Convert YYYYMMDD to YYYY-MM-DD
+        const uploadDate = rawDate.length === 8
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : rawDate;
+
+        if (id) {
+          videos.push({ id, title: title || 'Untitled', uploadDate });
+        }
+      }
+
+      resolve(videos);
+    });
+  });
 }

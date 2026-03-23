@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { childEnv, YT_DLP } from './env.js';
 import { getAllChannels, addChannel, deleteChannel, updateChannel, getChannelById, getPendingVideos, getAllVideos, getVideoById, updateVideoStatus, insertVideo, getServerStatus, } from './db.js';
 import { downloadAllApproved } from './downloader.js';
+import { backfillChannel } from './poller.js';
 export const router = Router();
 // --- Channels ---
 router.get('/api/channels', (_req, res) => {
@@ -27,6 +28,10 @@ router.post('/api/channels', async (req, res) => {
             min_duration: minDuration !== undefined ? Number(minDuration) : undefined,
         });
         res.status(201).json(channel);
+        // Run full backfill in the background (gets ALL videos, not just RSS ~15)
+        backfillChannel(channel)
+            .then(() => downloadAllApproved())
+            .catch((err) => console.error(`[API] Backfill error for ${channel.name}:`, err));
     }
     catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {

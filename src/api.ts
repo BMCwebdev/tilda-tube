@@ -15,6 +15,7 @@ import {
   getServerStatus,
 } from './db.js';
 import { downloadAllApproved } from './downloader.js';
+import { backfillChannel } from './poller.js';
 
 export const router = Router();
 
@@ -47,6 +48,11 @@ router.post('/api/channels', async (req: Request, res: Response) => {
     });
 
     res.status(201).json(channel);
+
+    // Run full backfill in the background (gets ALL videos, not just RSS ~15)
+    backfillChannel(channel)
+      .then(() => downloadAllApproved())
+      .catch((err) => console.error(`[API] Backfill error for ${channel.name}:`, err));
   } catch (err: any) {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       res.status(409).json({ error: 'Channel already exists' });

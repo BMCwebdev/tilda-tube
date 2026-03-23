@@ -13,7 +13,7 @@ src/
   server.ts       — Express app, cron job (daily 2am sync), startup backfill
   api.ts          — REST API routes (channels CRUD, video approval, single video add)
   db.ts           — SQLite via better-sqlite3, schema migrations, all queries
-  poller.ts       — Fetches YouTube RSS feeds, inserts new videos as pending/approved
+  poller.ts       — RSS polling (daily) + yt-dlp full backfill (on channel add)
   downloader.ts   — Downloads approved videos via yt-dlp, handles Shorts routing
   nfo.ts          — Generates Plex NFO files for collection grouping
   env.ts          — Shared child process env (PATH for Homebrew, yt-dlp path)
@@ -33,6 +33,7 @@ src/
 - **Shorts**: Videos shorter than a channel's `min_duration` download into `MEDIA_DIR/Shorts/ChannelName/` with NFO collection "Shorts - ChannelName". Full-length videos go to `MEDIA_DIR/ChannelName/`.
 - **NFO files**: Plex-compatible XML sidecar files placed next to each video. They set the `<set>` (collection) tag so Plex groups videos by channel. The backfill function on startup creates NFOs for any videos missing them, and detects Shorts by checking if the file path contains `/Shorts/`.
 - **Single videos**: Added via the Queue UI (or `POST /api/videos`), have `channel_id: null`, no duration filter applied.
+- **Polling vs backfill**: Daily RSS polling catches the ~15 most recent uploads (lightweight). On channel add, `backfillChannel()` runs yt-dlp `--flat-playlist` to discover ALL videos back to the `from_date` — this is slower but comprehensive. Duplicates are prevented by the `youtube_id` UNIQUE constraint.
 
 ## Tech stack
 
