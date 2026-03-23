@@ -23,6 +23,7 @@ export function getDb() {
       channel_url TEXT NOT NULL,
       from_date TEXT NOT NULL,
       auto_approve INTEGER NOT NULL DEFAULT 0,
+      min_duration INTEGER NOT NULL DEFAULT 120,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -40,6 +41,12 @@ export function getDb() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+    // Migrations for existing databases
+    const columns = db.prepare("PRAGMA table_info(channels)").all();
+    if (!columns.find((c) => c.name === 'min_duration')) {
+        db.exec("ALTER TABLE channels ADD COLUMN min_duration INTEGER NOT NULL DEFAULT 120");
+        console.log('[DB] Added min_duration column to channels');
+    }
     return db;
 }
 export function getAllChannels() {
@@ -56,10 +63,11 @@ export function getAllChannels() {
 }
 export function addChannel(data) {
     const db = getDb();
+    const minDur = data.min_duration ?? 120;
     const result = db.prepare(`
-    INSERT INTO channels (name, channel_id, channel_url, from_date, auto_approve)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(data.name, data.channel_id, data.channel_url, data.from_date, data.auto_approve ? 1 : 0);
+    INSERT INTO channels (name, channel_id, channel_url, from_date, auto_approve, min_duration)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(data.name, data.channel_id, data.channel_url, data.from_date, data.auto_approve ? 1 : 0, minDur);
     return db.prepare('SELECT * FROM channels WHERE id = ?').get(result.lastInsertRowid);
 }
 export function deleteChannel(id) {
@@ -82,6 +90,10 @@ export function updateChannel(id, data) {
     if (data.auto_approve !== undefined) {
         sets.push('auto_approve = ?');
         params.push(data.auto_approve ? 1 : 0);
+    }
+    if (data.min_duration !== undefined) {
+        sets.push('min_duration = ?');
+        params.push(data.min_duration);
     }
     if (sets.length === 0)
         return false;

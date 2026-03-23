@@ -7,6 +7,7 @@ export interface Channel {
     channel_url: string;
     from_date: string;
     auto_approve: number;
+    min_duration: number;
     created_at: string;
 }
 export interface ChannelWithCounts extends Channel {
@@ -20,12 +21,14 @@ export declare function addChannel(data: {
     channel_url: string;
     from_date: string;
     auto_approve: boolean;
+    min_duration?: number;
 }): Channel;
 export declare function deleteChannel(id: number): boolean;
 export declare function getChannelById(id: number): Channel | undefined;
 export declare function updateChannel(id: number, data: {
     from_date?: string;
     auto_approve?: boolean;
+    min_duration?: number;
 }): boolean;
 export interface Video {
     id: number;

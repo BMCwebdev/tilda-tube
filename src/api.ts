@@ -26,7 +26,7 @@ router.get('/api/channels', (_req: Request, res: Response) => {
 });
 
 router.post('/api/channels', async (req: Request, res: Response) => {
-  const { url, fromDate, autoApprove } = req.body;
+  const { url, fromDate, autoApprove, minDuration } = req.body;
 
   if (!url || !fromDate) {
     res.status(400).json({ error: 'url and fromDate are required' });
@@ -43,6 +43,7 @@ router.post('/api/channels', async (req: Request, res: Response) => {
       channel_url: url,
       from_date: fromDate,
       auto_approve: !!autoApprove,
+      min_duration: minDuration !== undefined ? Number(minDuration) : undefined,
     });
 
     res.status(201).json(channel);
@@ -63,11 +64,12 @@ router.patch('/api/channels/:id', (req: Request, res: Response) => {
     return;
   }
 
-  const { fromDate, autoApprove } = req.body;
-  const updates: { from_date?: string; auto_approve?: boolean } = {};
+  const { fromDate, autoApprove, minDuration } = req.body;
+  const updates: { from_date?: string; auto_approve?: boolean; min_duration?: number } = {};
 
   if (fromDate !== undefined) updates.from_date = fromDate;
   if (autoApprove !== undefined) updates.auto_approve = autoApprove;
+  if (minDuration !== undefined) updates.min_duration = Number(minDuration);
 
   const updated = updateChannel(id, updates);
   if (!updated) {

@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import { getApprovedVideos, updateVideoStatus, getChannelById, type Video } from './db.js';
+import { getApprovedVideos, updateVideoStatus, getChannelById, type Video, type Channel } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
 import { writeNfo } from './nfo.js';
 
@@ -26,15 +26,17 @@ export async function downloadAllApproved(): Promise<void> {
       if (approved.length === 0) break;
 
       const video = approved[0];
-      await downloadOne(video);
+      const channel = video.channel_id ? getChannelById(video.channel_id) : undefined;
+      await downloadOne(video, channel);
     }
   } finally {
     isDownloading = false;
   }
 }
 
-async function downloadOne(video: Video): Promise<void> {
-  console.log(`[Downloader] Starting download: "${video.title}" (${video.youtube_id})`);
+async function downloadOne(video: Video, channel?: Channel): Promise<void> {
+  const minDuration = channel?.min_duration ?? 0;
+  console.log(`[Downloader] Starting download: "${video.title}" (${video.youtube_id})${minDuration ? ` [min ${minDuration}s]` : ''}`);
   updateVideoStatus(video.id, 'downloading');
 
   try {
@@ -44,27 +46,32 @@ async function downloadOne(video: Video): Promise<void> {
       updateVideoStatus(video.id, 'done', { file_path: fakePath });
       console.log(`[Downloader] DRY_RUN: Marked "${video.title}" as done`);
     } else {
-      const filePath = await downloadVideo(video.youtube_id);
+      const filePath = await downloadVideo(video.youtube_id, minDuration);
       updateVideoStatus(video.id, 'done', { file_path: filePath });
 
       // Generate Plex NFO file for collection grouping
-      if (video.channel_id) {
-        const channel = getChannelById(video.channel_id);
-        if (channel) {
-          writeNfo(filePath, channel.name, video.title, video.published_at);
-        }
+      if (channel) {
+        writeNfo(filePath, channel.name, video.title, video.published_at);
       }
 
       console.log(`[Downloader] Completed: "${video.title}"`);
     }
   } catch (err: any) {
     const errorMsg = err.message || String(err);
+
+    // yt-dlp match-filter rejection — mark as rejected, not error
+    if (errorMsg.includes('does not pass filter')) {
+      console.log(`[Downloader] Skipped (too short): "${video.title}"`);
+      updateVideoStatus(video.id, 'rejected', { error_message: 'Too short (duration filter)' });
+      return;
+    }
+
     console.error(`[Downloader] Failed: "${video.title}" — ${errorMsg}`);
     updateVideoStatus(video.id, 'error', { error_message: errorMsg });
   }
 }
 
-function downloadVideo(youtubeId: string): Promise<string> {
+function downloadVideo(youtubeId: string, minDuration: number = 0): Promise<string> {
   return new Promise((resolve, reject) => {
     const outputTemplate = `${MEDIA_DIR}/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.%(ext)s`;
     const url = `https://www.youtube.com/watch?v=${youtubeId}`;
@@ -79,8 +86,13 @@ function downloadVideo(youtubeId: string): Promise<string> {
       '--no-playlist',
       '--print', 'after_move:filepath',
       '-o', outputTemplate,
-      url,
     ];
+
+    if (minDuration > 0) {
+      args.push('--match-filter', `duration > ${minDuration}`);
+    }
+
+    args.push(url);
 
     execFile(YT_DLP, args, { maxBuffer: 10 * 1024 * 1024, env: childEnv }, (error, stdout, stderr) => {
       if (error) {

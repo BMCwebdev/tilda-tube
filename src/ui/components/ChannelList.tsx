@@ -8,6 +8,7 @@ interface Channel {
   channel_url: string;
   from_date: string;
   auto_approve: number;
+  min_duration: number;
   video_count: number;
   pending_count: number;
 }
@@ -58,6 +59,7 @@ function EditChannelForm({ channel, onSave, onCancel }: {
   const [datePreset, setDatePreset] = useState<DatePreset>(getPresetFromDate(channel.from_date));
   const [customDate, setCustomDate] = useState(channel.from_date);
   const [autoApprove, setAutoApprove] = useState(!!channel.auto_approve);
+  const [minDuration, setMinDuration] = useState(channel.min_duration ?? 120);
   const [saving, setSaving] = useState(false);
 
   const fromDate = datePreset === 'custom' ? customDate : getDateFromPreset(datePreset);
@@ -68,7 +70,7 @@ function EditChannelForm({ channel, onSave, onCancel }: {
       await fetch(`/api/channels/${channel.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromDate, autoApprove }),
+        body: JSON.stringify({ fromDate, autoApprove, minDuration }),
       });
       onSave();
     } catch (err) {
@@ -134,7 +136,7 @@ function EditChannelForm({ channel, onSave, onCancel }: {
         )}
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
           <input
             type="checkbox"
@@ -144,6 +146,27 @@ function EditChannelForm({ channel, onSave, onCancel }: {
           />
           Auto-approve new videos
         </label>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Min length</label>
+          <select
+            value={minDuration}
+            onChange={(e) => setMinDuration(Number(e.target.value))}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              fontSize: 12,
+              background: '#fff',
+            }}
+          >
+            <option value={0}>No filter</option>
+            <option value={60}>1 minute</option>
+            <option value={120}>2 minutes</option>
+            <option value={180}>3 minutes</option>
+            <option value={300}>5 minutes</option>
+          </select>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
@@ -268,6 +291,7 @@ export function ChannelList({ onAction }: Props) {
                   Since {ch.from_date} &middot; {ch.video_count} video{ch.video_count !== 1 ? 's' : ''}{' '}
                   {ch.pending_count > 0 && `(${ch.pending_count} pending)`} &middot;{' '}
                   {ch.auto_approve ? 'Auto-approve' : 'Manual review'}
+                  {ch.min_duration > 0 && ` · Min ${Math.floor(ch.min_duration / 60)}m`}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>

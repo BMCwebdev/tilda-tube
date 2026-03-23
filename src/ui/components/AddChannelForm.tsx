@@ -30,6 +30,7 @@ export function AddChannelForm({ onAdded }: Props) {
   const [datePreset, setDatePreset] = useState<DatePreset>('1year');
   const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
   const [autoApprove, setAutoApprove] = useState(false);
+  const [minDuration, setMinDuration] = useState(120);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -46,7 +47,7 @@ export function AddChannelForm({ onAdded }: Props) {
       const res = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), fromDate, autoApprove }),
+        body: JSON.stringify({ url: url.trim(), fromDate, autoApprove, minDuration }),
       });
 
       if (!res.ok) {
@@ -142,7 +143,7 @@ export function AddChannelForm({ onAdded }: Props) {
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
           <input
             type="checkbox"
@@ -152,6 +153,27 @@ export function AddChannelForm({ onAdded }: Props) {
           />
           Auto-approve
         </label>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Min length</label>
+          <select
+            value={minDuration}
+            onChange={(e) => setMinDuration(Number(e.target.value))}
+            style={{
+              padding: '6px 10px',
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              fontSize: 13,
+              background: '#fff',
+            }}
+          >
+            <option value={0}>No filter</option>
+            <option value={60}>1 minute</option>
+            <option value={120}>2 minutes</option>
+            <option value={180}>3 minutes</option>
+            <option value={300}>5 minutes</option>
+          </select>
+        </div>
       </div>
 
       {error && (

@@ -10,7 +10,7 @@ router.get('/api/channels', (_req, res) => {
     res.json(channels);
 });
 router.post('/api/channels', async (req, res) => {
-    const { url, fromDate, autoApprove } = req.body;
+    const { url, fromDate, autoApprove, minDuration } = req.body;
     if (!url || !fromDate) {
         res.status(400).json({ error: 'url and fromDate are required' });
         return;
@@ -24,6 +24,7 @@ router.post('/api/channels', async (req, res) => {
             channel_url: url,
             from_date: fromDate,
             auto_approve: !!autoApprove,
+            min_duration: minDuration !== undefined ? Number(minDuration) : undefined,
         });
         res.status(201).json(channel);
     }
@@ -42,12 +43,14 @@ router.patch('/api/channels/:id', (req, res) => {
         res.status(400).json({ error: 'Invalid channel ID' });
         return;
     }
-    const { fromDate, autoApprove } = req.body;
+    const { fromDate, autoApprove, minDuration } = req.body;
     const updates = {};
     if (fromDate !== undefined)
         updates.from_date = fromDate;
     if (autoApprove !== undefined)
         updates.auto_approve = autoApprove;
+    if (minDuration !== undefined)
+        updates.min_duration = Number(minDuration);
     const updated = updateChannel(id, updates);
     if (!updated) {
         res.status(404).json({ error: 'Channel not found' });

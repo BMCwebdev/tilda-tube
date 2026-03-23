@@ -28,6 +28,7 @@ export function getDb(): Database.Database {
       channel_url TEXT NOT NULL,
       from_date TEXT NOT NULL,
       auto_approve INTEGER NOT NULL DEFAULT 0,
+      min_duration INTEGER NOT NULL DEFAULT 120,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -46,6 +47,13 @@ export function getDb(): Database.Database {
     );
   `);
 
+  // Migrations for existing databases
+  const columns = db.prepare("PRAGMA table_info(channels)").all() as any[];
+  if (!columns.find((c: any) => c.name === 'min_duration')) {
+    db.exec("ALTER TABLE channels ADD COLUMN min_duration INTEGER NOT NULL DEFAULT 120");
+    console.log('[DB] Added min_duration column to channels');
+  }
+
   return db;
 }
 
@@ -58,6 +66,7 @@ export interface Channel {
   channel_url: string;
   from_date: string;
   auto_approve: number;
+  min_duration: number;
   created_at: string;
 }
 
@@ -85,12 +94,14 @@ export function addChannel(data: {
   channel_url: string;
   from_date: string;
   auto_approve: boolean;
+  min_duration?: number;
 }): Channel {
   const db = getDb();
+  const minDur = data.min_duration ?? 120;
   const result = db.prepare(`
-    INSERT INTO channels (name, channel_id, channel_url, from_date, auto_approve)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(data.name, data.channel_id, data.channel_url, data.from_date, data.auto_approve ? 1 : 0);
+    INSERT INTO channels (name, channel_id, channel_url, from_date, auto_approve, min_duration)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(data.name, data.channel_id, data.channel_url, data.from_date, data.auto_approve ? 1 : 0, minDur);
 
   return db.prepare('SELECT * FROM channels WHERE id = ?').get(result.lastInsertRowid) as Channel;
 }
@@ -106,7 +117,7 @@ export function getChannelById(id: number): Channel | undefined {
   return db.prepare('SELECT * FROM channels WHERE id = ?').get(id) as Channel | undefined;
 }
 
-export function updateChannel(id: number, data: { from_date?: string; auto_approve?: boolean }): boolean {
+export function updateChannel(id: number, data: { from_date?: string; auto_approve?: boolean; min_duration?: number }): boolean {
   const db = getDb();
   const sets: string[] = [];
   const params: any[] = [];
@@ -118,6 +129,10 @@ export function updateChannel(id: number, data: { from_date?: string; auto_appro
   if (data.auto_approve !== undefined) {
     sets.push('auto_approve = ?');
     params.push(data.auto_approve ? 1 : 0);
+  }
+  if (data.min_duration !== undefined) {
+    sets.push('min_duration = ?');
+    params.push(data.min_duration);
   }
 
   if (sets.length === 0) return false;
