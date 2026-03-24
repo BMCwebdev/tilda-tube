@@ -269,21 +269,6 @@ export function getVideoById(id: number): Video | undefined {
   return db.prepare('SELECT * FROM videos WHERE id = ?').get(id) as Video | undefined;
 }
 
-export function getDownloadedVideosWithChannel(): Array<{
-  file_path: string | null;
-  title: string;
-  channel_name: string | null;
-  published_at: string;
-}> {
-  const db = getDb();
-  return db.prepare(`
-    SELECT v.file_path, v.title, c.name as channel_name, v.published_at
-    FROM videos v
-    LEFT JOIN channels c ON v.channel_id = c.id
-    WHERE v.status = 'done' AND v.file_path IS NOT NULL
-  `).all() as any[];
-}
-
 export function getServerStatus(): {
   channelCount: number;
   pendingCount: number;

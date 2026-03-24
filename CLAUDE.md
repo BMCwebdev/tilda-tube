@@ -2,7 +2,7 @@
 
 ## What is this project?
 
-TildaTube is a self-hosted YouTube media server for kids. Parents curate channels and approve videos via a web UI, videos are downloaded via yt-dlp, and Plex serves them on Apple TV — no YouTube UI, no ads, no algorithm.
+TildaTube is a self-hosted YouTube media server for kids. Parents curate channels and approve videos via a web UI, videos are downloaded via yt-dlp, and served to Apple TV via Infuse (over SMB) — no YouTube UI, no ads, no algorithm.
 
 Runs on a Mac Mini (Intel) with an external drive at `/Volumes/TildaTube`.
 
@@ -15,8 +15,6 @@ src/
   db.ts           — SQLite via better-sqlite3, schema migrations, all queries
   poller.ts       — RSS polling (daily) + yt-dlp full backfill (on channel add)
   downloader.ts   — Downloads approved videos via yt-dlp, handles Shorts routing
-  plex.ts         — Plex API integration: collection tagging + backfill
-  nfo.ts          — NFO file generation (DISABLED — no Plex agent reads <set> tags yet)
   env.ts          — Shared child process env (PATH for Homebrew, yt-dlp path)
   ui/             — React SPA (Vite + React 18, no framework)
     App.tsx        — Main app with tab navigation (Queue, Channels, Library)
@@ -31,9 +29,7 @@ src/
 
 - **Video lifecycle**: `pending` → `approved` → `downloading` → `done` (or `rejected`/`error`)
 - **Channels** have `auto_approve` (skip the queue) and `min_duration` (shorts threshold)
-- **Shorts**: Videos shorter than a channel's `min_duration` download into `MEDIA_DIR/Shorts/ChannelName/` with NFO collection "Shorts - ChannelName". Full-length videos go to `MEDIA_DIR/ChannelName/`.
-- **Plex collections**: After downloading a video, `plex.ts` calls the Plex API to tag it with a collection matching the channel name (or "Shorts - ChannelName"). Requires `PLEX_TOKEN` env var. On startup, `backfillPlexCollections()` tags any existing videos not yet in a collection.
-- **NFO files (disabled)**: `nfo.ts` generates Plex-compatible NFO sidecar files with `<set>` tags. Currently commented out because no built-in Plex agent reads these for collections. Kept in the codebase — Plex is developing an official NFO agent that may support this in the future.
+- **Shorts**: Videos shorter than a channel's `min_duration` download into `MEDIA_DIR/Shorts/ChannelName/`. Full-length videos go to `MEDIA_DIR/ChannelName/`. Infuse browses these folders directly over SMB.
 - **Single videos**: Added via the Queue UI (or `POST /api/videos`), have `channel_id: null`, no duration filter applied.
 - **Polling vs backfill**: Daily RSS polling catches the ~15 most recent uploads (lightweight). On channel add, `backfillChannel()` runs yt-dlp `--flat-playlist` to discover ALL videos back to the `from_date` — this is slower but comprehensive. Duplicates are prevented by the `youtube_id` UNIQUE constraint.
 

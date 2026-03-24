@@ -20,8 +20,10 @@
 - [x] Prerequisites verified: Node v18.20.5, yt-dlp 2026.03.17, Deno 2.7.7, ffmpeg 8.1
 - [x] Fixed shell syntax error in downloader (`downloadVideo` was using `&&` outside shell context)
 - [x] YouTube channels added via web UI — RSS polling working for most channels
-- [x] Plex Media Server installed on Mac Mini and configured with library pointed at `/Volumes/TildaTube/media`
-- [x] Plex app installed on Apple TV
+- [x] ~~Plex Media Server installed on Mac Mini~~ — Removed in favor of Infuse over SMB
+- [x] SMB file sharing enabled on Mac Mini (System Preferences → Sharing → File Sharing + SMB)
+- [x] Infuse app installed on Apple TV, connected to Mac Mini via SMB
+- [x] Plex integration removed from codebase (plex.ts, nfo.ts deleted)
 
 ## Issues Encountered
 
@@ -64,11 +66,10 @@
 - Set DHCP reservation in router for `192.168.0.76`
 - Or confirm `brians-mac-mini.local` works reliably across devices
 
-### ~~Install and configure Plex~~ ✓ DONE
-- ~~Download Plex Media Server from plex.tv~~
-- ~~Create a library pointed at `/Volumes/TildaTube/media`~~
-- ~~Install Plex app on Apple TV~~
-- Verify channel folders appear correctly in Plex after first downloads
+### ~~Install and configure Plex~~ → Replaced with Infuse over SMB ✓ DONE
+- ~~Plex removed from codebase~~
+- SMB file sharing configured on Mac Mini
+- Infuse installed on Apple TV, browsing media folders over SMB
 
 ### Energy Saver settings
 - Set computer sleep to **Never**
@@ -79,4 +80,24 @@
 - Add a YouTube channel via the web UI
 - Verify RSS polling picks up videos
 - Approve a video and confirm it downloads to `/Volumes/TildaTube/media/`
-- Confirm the video appears in Plex on Apple TV
+- Confirm the video appears in Infuse on Apple TV
+
+---
+
+## Plex → Infuse Migration (2026-03-23/24)
+
+### Problem
+Plex on Apple TV showed "server is not powerful enough to convert the video" warnings. The 2012 Mac Mini (Ivy Bridge) has no hardware transcoding support.
+
+### Solution: Replaced Plex with Infuse over SMB ✓ DONE
+- **Infuse plays everything natively** on the Apple TV — VP9, H.264, HEVC, MKV. No server-side transcoding.
+- **Folder-based browsing** — `media/ChannelName/` structure shows up as browsable channel folders.
+- **No sideloading** — Infuse is in the App Store. Free tier is sufficient.
+- **Plex fully removed** from codebase — `plex.ts`, `nfo.ts` deleted, all API calls removed, `PLEX_TOKEN` removed from plist.
+
+### Remaining Questions
+
+- [ ] Does Infuse's folder browsing give a good enough "channel picker" experience?
+- [ ] Does `brians-mac-mini.local` work for SMB from Apple TV (vs hardcoded IP)?
+- [ ] Is the Shorts subfolder structure (`media/Shorts/ChannelName/`) intuitive in Infuse, or should we flatten it?
+- [ ] Should we add `folder.jpg` (channel profile pics) to improve folder thumbnails in Infuse?

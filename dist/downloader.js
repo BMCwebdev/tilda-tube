@@ -1,11 +1,11 @@
 import { execFile } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import { getApprovedVideos, updateVideoStatus, getChannelById } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
-// NFO disabled — no current Plex agent reads <set> tags. Using Plex API instead.
-// import { writeNfo } from './nfo.js';
-import { addToPlexCollection } from './plex.js';
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
+const MIN_FREE_SPACE_BYTES = 1024 * 1024 * 1024; // 1 GB
 let isDownloading = false;
 /**
  * Download all approved videos sequentially.
@@ -20,6 +20,21 @@ export async function downloadAllApproved() {
     isDownloading = true;
     try {
         while (true) {
+            // Check disk space before each download
+            try {
+                const stats = fs.statfsSync(MEDIA_DIR);
+                const freeBytes = stats.bfree * stats.bsize;
+                if (freeBytes < MIN_FREE_SPACE_BYTES) {
+                    const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(1);
+                    console.error(`[Downloader] Low disk space (${freeGB} GB free), pausing downloads`);
+                    break;
+                }
+            }
+            catch {
+                // If we can't check disk space (e.g. drive not mounted), stop downloading
+                console.error('[Downloader] Cannot check disk space — is the media drive mounted?');
+                break;
+            }
             const approved = getApprovedVideos();
             if (approved.length === 0)
                 break;
@@ -57,13 +72,6 @@ async function downloadOne(video, channel) {
             const maxQuality = video.max_quality ?? channel?.max_quality ?? 720;
             const filePath = await downloadVideo(video.youtube_id, isShort, maxQuality);
             updateVideoStatus(video.id, 'done', { file_path: filePath });
-            // Tag video in Plex with channel collection
-            if (channel) {
-                const collectionName = isShort ? `Shorts - ${channel.name}` : channel.name;
-                // NFO disabled — using Plex API instead
-                // writeNfo(filePath, collectionName, video.title, video.published_at);
-                addToPlexCollection(filePath, collectionName).catch((err) => console.error(`[Downloader] Plex tagging failed for "${video.title}":`, err));
-            }
             console.log(`[Downloader] Completed${isShort ? ' (short)' : ''}: "${video.title}"`);
         }
     }
@@ -93,6 +101,44 @@ function getVideoDuration(youtubeId) {
             resolve(isNaN(seconds) ? null : seconds);
         });
     });
+}
+/**
+ * Fetch a YouTube channel's avatar and save it as folder.jpg in the channel's media directory.
+ * Infuse uses folder.jpg as the folder thumbnail when browsing via SMB.
+ */
+export async function fetchChannelAvatar(channelId, channelName) {
+    const channelDir = path.join(MEDIA_DIR, channelName);
+    try {
+        // Fetch the YouTube channel page and extract the avatar URL from og:image
+        const channelUrl = `https://www.youtube.com/channel/${channelId}`;
+        const res = await fetch(channelUrl);
+        if (!res.ok) {
+            console.warn(`[Avatar] Failed to fetch channel page: HTTP ${res.status}`);
+            return;
+        }
+        const html = await res.text();
+        const match = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
+        if (!match) {
+            console.warn(`[Avatar] No og:image found for ${channelName}`);
+            return;
+        }
+        const avatarUrl = match[1];
+        // Download the avatar image
+        const imgRes = await fetch(avatarUrl);
+        if (!imgRes.ok) {
+            console.warn(`[Avatar] Failed to download avatar: HTTP ${imgRes.status}`);
+            return;
+        }
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        // Save to the channel's media folder (create if needed)
+        fs.mkdirSync(channelDir, { recursive: true });
+        const folderJpg = path.join(channelDir, 'folder.jpg');
+        fs.writeFileSync(folderJpg, buffer);
+        console.log(`[Avatar] Saved folder.jpg for ${channelName}`);
+    }
+    catch (err) {
+        console.error(`[Avatar] Error fetching avatar for ${channelName}:`, err);
+    }
 }
 function downloadVideo(youtubeId, isShort = false, maxQuality = 720) {
     return new Promise((resolve, reject) => {

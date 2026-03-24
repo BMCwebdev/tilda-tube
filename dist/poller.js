@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { XMLParser } from 'fast-xml-parser';
 import { getAllChannels, videoExists, insertVideo } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
+const MAX_NEW_VIDEOS_PER_CHANNEL = 75;
 const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
@@ -48,6 +49,10 @@ async function pollChannel(channel) {
             continue;
         if (videoExists(youtubeId))
             continue;
+        if (newCount >= MAX_NEW_VIDEOS_PER_CHANNEL) {
+            console.warn(`[Poller] Hit ${MAX_NEW_VIDEOS_PER_CHANNEL} video cap for ${channel.name}, stopping`);
+            break;
+        }
         const thumbnailUrl = entry['media:group']?.['media:thumbnail']?.['@_url'] ||
             `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
         const status = channel.auto_approve ? 'approved' : 'pending';
@@ -85,6 +90,10 @@ export async function backfillChannel(channel) {
     for (const video of videos) {
         if (videoExists(video.id))
             continue;
+        if (newCount >= MAX_NEW_VIDEOS_PER_CHANNEL) {
+            console.warn(`[Backfill] Hit ${MAX_NEW_VIDEOS_PER_CHANNEL} video cap for ${channel.name}, stopping`);
+            break;
+        }
         const status = channel.auto_approve ? 'approved' : 'pending';
         insertVideo({
             channel_id: channel.id,
@@ -109,6 +118,7 @@ function listChannelVideos(channelUrl, dateAfter) {
             '--print', 'title',
             '--print', 'upload_date',
             '--dateafter', dateAfter,
+            '--playlist-items', `1:${MAX_NEW_VIDEOS_PER_CHANNEL}`,
             '--no-download',
             channelUrl,
         ];
