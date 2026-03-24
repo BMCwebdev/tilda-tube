@@ -2,10 +2,12 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
-import { getDb } from './db.js';
+import { getDb, getAllChannels } from './db.js';
 import { router } from './api.js';
 import { pollChannels } from './poller.js';
-import { downloadAllApproved } from './downloader.js';
+import { downloadAllApproved, fetchChannelAvatar } from './downloader.js';
+import fs from 'fs';
+import { join } from 'path';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
 // Initialize database
@@ -36,6 +38,15 @@ async function dailySyncJob() {
 cron.schedule('0 2 * * *', () => {
     dailySyncJob().catch((err) => console.error('[Cron] Daily sync error:', err));
 });
+// Backfill folder.jpg avatars for existing channels that don't have one
+const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
+const channels = getAllChannels();
+for (const ch of channels) {
+    const folderJpg = join(MEDIA_DIR, ch.name, 'folder.jpg');
+    if (!fs.existsSync(folderJpg)) {
+        fetchChannelAvatar(ch.channel_id, ch.name).catch((err) => console.error(`[Server] Avatar backfill error for ${ch.name}:`, err));
+    }
+}
 // Run initial sync on startup
 console.log('[Server] Running initial sync...');
 dailySyncJob().catch((err) => console.error('[Server] Initial sync error:', err));

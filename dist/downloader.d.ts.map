@@ -1,1 +1,1 @@
-{"version":3,"file":"downloader.d.ts","sourceRoot":"","sources":["../src/downloader.ts"],"names":[],"mappings":"AASA;;;;GAIG;AACH,wBAAsB,mBAAmB,IAAI,OAAO,CAAC,IAAI,CAAC,CAmBzD"}
+{"version":3,"file":"downloader.d.ts","sourceRoot":"","sources":["../src/downloader.ts"],"names":[],"mappings":"AAWA;;;;GAIG;AACH,wBAAsB,mBAAmB,IAAI,OAAO,CAAC,IAAI,CAAC,CAmBzD;AA6DD;;;GAGG;AACH,wBAAsB,kBAAkB,CAAC,SAAS,EAAE,MAAM,EAAE,WAAW,EAAE,MAAM,GAAG,OAAO,CAAC,IAAI,CAAC,CAsC9F"}

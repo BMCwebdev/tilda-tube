@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { execFile } from 'child_process';
 import { childEnv, YT_DLP } from './env.js';
 import { getAllChannels, addChannel, deleteChannel, updateChannel, getChannelById, getPendingVideos, getAllVideos, getVideoById, updateVideoStatus, insertVideo, getServerStatus, } from './db.js';
-import { downloadAllApproved } from './downloader.js';
+import { downloadAllApproved, fetchChannelAvatar } from './downloader.js';
 import { backfillChannel } from './poller.js';
 export const router = Router();
 // --- Channels ---
@@ -29,6 +29,8 @@ router.post('/api/channels', async (req, res) => {
             max_quality: maxQuality !== undefined ? Number(maxQuality) : undefined,
         });
         res.status(201).json(channel);
+        // Fetch channel avatar for Infuse folder thumbnail
+        fetchChannelAvatar(channelId, channelName).catch((err) => console.error(`[API] Avatar fetch error for ${channelName}:`, err));
         // Run full backfill in the background (gets ALL videos, not just RSS ~15)
         backfillChannel(channel)
             .then(() => downloadAllApproved())

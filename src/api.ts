@@ -14,7 +14,7 @@ import {
   insertVideo,
   getServerStatus,
 } from './db.js';
-import { downloadAllApproved } from './downloader.js';
+import { downloadAllApproved, fetchChannelAvatar } from './downloader.js';
 import { backfillChannel } from './poller.js';
 
 export const router = Router();
@@ -49,6 +49,11 @@ router.post('/api/channels', async (req: Request, res: Response) => {
     });
 
     res.status(201).json(channel);
+
+    // Fetch channel avatar for Infuse folder thumbnail
+    fetchChannelAvatar(channelId, channelName).catch((err) =>
+      console.error(`[API] Avatar fetch error for ${channelName}:`, err)
+    );
 
     // Run full backfill in the background (gets ALL videos, not just RSS ~15)
     backfillChannel(channel)

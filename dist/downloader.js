@@ -1,4 +1,6 @@
 import { execFile } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import { getApprovedVideos, updateVideoStatus, getChannelById } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
 const DRY_RUN = process.env.DRY_RUN === 'true';
@@ -83,6 +85,44 @@ function getVideoDuration(youtubeId) {
             resolve(isNaN(seconds) ? null : seconds);
         });
     });
+}
+/**
+ * Fetch a YouTube channel's avatar and save it as folder.jpg in the channel's media directory.
+ * Infuse uses folder.jpg as the folder thumbnail when browsing via SMB.
+ */
+export async function fetchChannelAvatar(channelId, channelName) {
+    const channelDir = path.join(MEDIA_DIR, channelName);
+    try {
+        // Fetch the YouTube channel page and extract the avatar URL from og:image
+        const channelUrl = `https://www.youtube.com/channel/${channelId}`;
+        const res = await fetch(channelUrl);
+        if (!res.ok) {
+            console.warn(`[Avatar] Failed to fetch channel page: HTTP ${res.status}`);
+            return;
+        }
+        const html = await res.text();
+        const match = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
+        if (!match) {
+            console.warn(`[Avatar] No og:image found for ${channelName}`);
+            return;
+        }
+        const avatarUrl = match[1];
+        // Download the avatar image
+        const imgRes = await fetch(avatarUrl);
+        if (!imgRes.ok) {
+            console.warn(`[Avatar] Failed to download avatar: HTTP ${imgRes.status}`);
+            return;
+        }
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        // Save to the channel's media folder (create if needed)
+        fs.mkdirSync(channelDir, { recursive: true });
+        const folderJpg = path.join(channelDir, 'folder.jpg');
+        fs.writeFileSync(folderJpg, buffer);
+        console.log(`[Avatar] Saved folder.jpg for ${channelName}`);
+    }
+    catch (err) {
+        console.error(`[Avatar] Error fetching avatar for ${channelName}:`, err);
+    }
 }
 function downloadVideo(youtubeId, isShort = false, maxQuality = 720) {
     return new Promise((resolve, reject) => {
