@@ -1,9 +1,6 @@
 import { execFile } from 'child_process';
 import { getApprovedVideos, updateVideoStatus, getChannelById, type Video, type Channel } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
-// NFO disabled — no current Plex agent reads <set> tags. Using Plex API instead.
-// import { writeNfo } from './nfo.js';
-import { addToPlexCollection } from './plex.js';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
@@ -63,16 +60,6 @@ async function downloadOne(video: Video, channel?: Channel): Promise<void> {
 
       const filePath = await downloadVideo(video.youtube_id, isShort, maxQuality);
       updateVideoStatus(video.id, 'done', { file_path: filePath });
-
-      // Tag video in Plex with channel collection
-      if (channel) {
-        const collectionName = isShort ? `Shorts - ${channel.name}` : channel.name;
-        // NFO disabled — using Plex API instead
-        // writeNfo(filePath, collectionName, video.title, video.published_at);
-        addToPlexCollection(filePath, collectionName).catch((err) =>
-          console.error(`[Downloader] Plex tagging failed for "${video.title}":`, err)
-        );
-      }
 
       console.log(`[Downloader] Completed${isShort ? ' (short)' : ''}: "${video.title}"`);
     }

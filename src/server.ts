@@ -2,15 +2,10 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
-import { getDb, getDownloadedVideosWithChannel } from './db.js';
+import { getDb } from './db.js';
 import { router } from './api.js';
 import { pollChannels } from './poller.js';
 import { downloadAllApproved } from './downloader.js';
-// NFO files: commented out — no current Plex agent reads <set> tags for collections.
-// Plex is developing an official NFO agent (preview as of early 2026) that may support
-// this in the future. See nfo.ts for the implementation.
-// import { backfillNfoFiles } from './nfo.js';
-import { backfillPlexCollections } from './plex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -49,15 +44,6 @@ async function dailySyncJob() {
 cron.schedule('0 2 * * *', () => {
   dailySyncJob().catch((err) => console.error('[Cron] Daily sync error:', err));
 });
-
-// NFO backfill disabled — see comment at top of file
-// backfillNfoFiles(getDownloadedVideosWithChannel());
-
-// Tag existing downloaded videos with Plex collections (if not already tagged)
-console.log('[Server] Checking Plex collections...');
-backfillPlexCollections(getDownloadedVideosWithChannel()).catch((err) =>
-  console.error('[Server] Plex backfill error:', err)
-);
 
 // Run initial sync on startup
 console.log('[Server] Running initial sync...');

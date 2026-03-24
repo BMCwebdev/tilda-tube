@@ -1,6 +1,6 @@
 # TildaTube
 
-A self-hosted YouTube media server for kids. Parents curate a safe, ad-free library of YouTube content that's served through Plex on Apple TV — no YouTube UI, no ads, no algorithmic suggestions.
+A self-hosted YouTube media server for kids. Parents curate a safe, ad-free library of YouTube content that's served to Apple TV via Infuse (over SMB file sharing) — no YouTube UI, no ads, no algorithmic suggestions.
 
 ## How It Works
 
@@ -8,7 +8,7 @@ A self-hosted YouTube media server for kids. Parents curate a safe, ad-free libr
 2. **Daily sync job polls RSS feeds** at 2:00am for new uploads
 3. **New videos land in an approval queue** (or auto-download if enabled)
 4. **Approved videos are downloaded** via `yt-dlp` to a local drive
-5. **Plex serves the library** to Apple TV — child sees only curated content
+5. **Infuse on Apple TV browses the library** via SMB — child sees only curated content
 
 ---
 
@@ -44,32 +44,15 @@ mkdir -p /Volumes/TildaTube/logs
 
 ---
 
-## Install Plex Media Server
+## Setup the Mac Mini for file sharing
 
-1. Download from [plex.tv/media-server-downloads](https://www.plex.tv/media-server-downloads/)
-2. Install the macOS `.dmg` and sign in (free account is fine)
-3. Open Plex Web UI at `http://localhost:32400/web`
+1. Open **System Preferences → Sharing**
+2. Enable **File Sharing**
+3. Add `/Volumes/TildaTube/media` as a shared folder
+4. Click **Options...** and check **Share files and folders using SMB**
+5. Check your user account under the SMB section and enter your password when prompted
 
-### Configure a Movies library
-
-> **Important:** The library type must be **Movies**, not "Home Videos" or "Other Videos". Only the Movies type reads NFO sidecar files, which is how TildaTube groups videos into channel collections.
-
-1. In Plex, click **+** next to "Libraries" in the sidebar
-2. Choose **Movies** as the library type
-3. Name it something like "Tilda's Videos"
-4. Click **Browse for media folder** and select `/Volumes/TildaTube/media`
-5. Click **Advanced** and set these options:
-   - **Agent**: Personal Media (not Plex Movie — that would try to match YouTube videos against movie databases)
-   - **Enable cinema trailers**: Off (these are real movie trailers, not useful here)
-   - **Use original titles**: Off (default)
-   - **Prefer artwork based on library language**: On (default)
-   - **Use local assets**: On (default — this is what reads our NFO files and embedded thumbnails)
-   - **Allow matching to explicit content**: Off (default — keep off for a kids library)
-   - **Enable video preview thumbnails**: Off (CPU-intensive hover-to-scrub previews; our actual thumbnail images still show up regardless)
-   - **Collections**: Show collections and their items (default — shows both channel groups and individual videos)
-6. Click **Add Library**
-
-Each YouTube channel appears as a Plex collection (via the `<set>` tag in NFO files). Short videos get their own "Shorts - ChannelName" collections. On Apple TV, your child opens the Plex app and sees channel collections with downloaded videos inside.
+On Apple TV, install **Infuse** and add a new share pointing to your Mac Mini's SMB address (e.g., `smb://brians-mac-mini.local/TildaTube/media`). Infuse will browse the folder structure directly — each channel is a folder, shorts are in a `Shorts/` subfolder.
 
 ---
 
@@ -92,22 +75,6 @@ Edit `com.tildatube.plist` — you need to change **three things**:
 
 1. Replace `/Users/USERNAME/` with your actual macOS username (appears 2 times)
 2. Verify the node path — run `which node` and update if different from `/usr/local/bin/node`
-3. Set `PLEX_TOKEN` to your Plex authentication token (see below)
-
-#### Finding your Plex token
-
-1. Open Plex Web UI (`http://localhost:32400/web`)
-2. Navigate to any media item and click **Get Info**
-3. Click **View XML** (the `</>` icon)
-4. In the URL bar, find the `X-Plex-Token=XXXXX` parameter — that's your token
-
-Replace `YOUR_PLEX_TOKEN_HERE` in the plist with this value. The token is used to tag videos with channel-name collections via the Plex API after download.
-
-If running manually instead of via launchd, set the env var:
-
-```bash
-PLEX_TOKEN=your_token_here node dist/server.js
-```
 
 Then install the service:
 
@@ -171,11 +138,11 @@ When a channel has a minimum length set (default 2 minutes), videos shorter than
     Sesame Street/         ← clips & shorts
 ```
 
-In Plex, shorts appear in their own "Shorts - ChannelName" collection, keeping the main library uncluttered while still making short clips available.
+In Infuse, shorts appear in their own subfolder, keeping the main library uncluttered while still making short clips available.
 
 ### What the child sees
 
-Open the **Plex** app on Apple TV. Videos are organized by channel name in the Home Videos library. Shorts are separated into their own collections. No ads, no suggestions, no YouTube UI.
+Open **Infuse** on Apple TV. Videos are organized by channel name in folders. Shorts are in a separate `Shorts/` folder. No ads, no suggestions, no YouTube UI.
 
 ---
 
@@ -252,7 +219,7 @@ If this fails, check that Deno is installed (`deno --version`) and on the PATH.
 - **"yt-dlp: error: unable to extract..."** — Deno may not be installed. Run `brew install deno`.
 - **Downloads fail silently** — Check `/Volumes/TildaTube/logs/tildatube.err` for yt-dlp stderr output.
 - **External drive not mounted** — Ensure `/Volumes/TildaTube` is mounted. The service will fail to start if the DB path is unavailable.
-- **Port conflict** — TildaTube runs on port 3001. Plex uses 32400. They should not conflict.
+- **Port conflict** — TildaTube runs on port 3001. If something else uses this port, set `PORT` env var.
 
 ### Path differences (Intel vs Apple Silicon)
 

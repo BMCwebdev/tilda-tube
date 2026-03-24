@@ -184,15 +184,6 @@ export function getVideoById(id) {
     const db = getDb();
     return db.prepare('SELECT * FROM videos WHERE id = ?').get(id);
 }
-export function getDownloadedVideosWithChannel() {
-    const db = getDb();
-    return db.prepare(`
-    SELECT v.file_path, v.title, c.name as channel_name, v.published_at
-    FROM videos v
-    LEFT JOIN channels c ON v.channel_id = c.id
-    WHERE v.status = 'done' AND v.file_path IS NOT NULL
-  `).all();
-}
 export function getServerStatus() {
     const db = getDb();
     const channels = db.prepare('SELECT COUNT(*) as count FROM channels').get();
