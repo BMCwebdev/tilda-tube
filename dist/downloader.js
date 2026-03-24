@@ -5,6 +5,7 @@ import { getApprovedVideos, updateVideoStatus, getChannelById } from './db.js';
 import { childEnv, YT_DLP } from './env.js';
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
+const MIN_FREE_SPACE_BYTES = 1024 * 1024 * 1024; // 1 GB
 let isDownloading = false;
 /**
  * Download all approved videos sequentially.
@@ -19,6 +20,21 @@ export async function downloadAllApproved() {
     isDownloading = true;
     try {
         while (true) {
+            // Check disk space before each download
+            try {
+                const stats = fs.statfsSync(MEDIA_DIR);
+                const freeBytes = stats.bfree * stats.bsize;
+                if (freeBytes < MIN_FREE_SPACE_BYTES) {
+                    const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(1);
+                    console.error(`[Downloader] Low disk space (${freeGB} GB free), pausing downloads`);
+                    break;
+                }
+            }
+            catch {
+                // If we can't check disk space (e.g. drive not mounted), stop downloading
+                console.error('[Downloader] Cannot check disk space — is the media drive mounted?');
+                break;
+            }
             const approved = getApprovedVideos();
             if (approved.length === 0)
                 break;

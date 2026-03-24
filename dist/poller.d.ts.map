@@ -1,1 +1,1 @@
-{"version":3,"file":"poller.d.ts","sourceRoot":"","sources":["../src/poller.ts"],"names":[],"mappings":"AAEA,OAAO,EAA4C,KAAK,OAAO,EAAE,MAAM,SAAS,CAAC;AAmBjF,wBAAsB,YAAY,IAAI,OAAO,CAAC,IAAI,CAAC,CAWlD;AA6DD;;;;GAIG;AACH,wBAAsB,eAAe,CAAC,OAAO,EAAE,OAAO,GAAG,OAAO,CAAC,IAAI,CAAC,CAkCrE"}
+{"version":3,"file":"poller.d.ts","sourceRoot":"","sources":["../src/poller.ts"],"names":[],"mappings":"AAEA,OAAO,EAA4C,KAAK,OAAO,EAAE,MAAM,SAAS,CAAC;AAqBjF,wBAAsB,YAAY,IAAI,OAAO,CAAC,IAAI,CAAC,CAWlD;AAkED;;;;GAIG;AACH,wBAAsB,eAAe,CAAC,OAAO,EAAE,OAAO,GAAG,OAAO,CAAC,IAAI,CAAC,CAuCrE"}
