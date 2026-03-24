@@ -94,6 +94,26 @@ router.patch('/api/channels/:id', (req: Request, res: Response) => {
   res.json(channel);
 });
 
+router.post('/api/channels/:id/backfill', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid channel ID' });
+    return;
+  }
+
+  const channel = getChannelById(id);
+  if (!channel) {
+    res.status(404).json({ error: 'Channel not found' });
+    return;
+  }
+
+  res.json({ success: true, message: `Backfill started for ${channel.name}` });
+
+  backfillChannel(channel)
+    .then(() => downloadAllApproved())
+    .catch((err) => console.error(`[API] Backfill error for ${channel.name}:`, err));
+});
+
 router.delete('/api/channels/:id', (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
