@@ -1,166 +1,125 @@
 import { execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { getApprovedVideos, updateVideoStatus, getChannelById, type Video, type Channel } from './db.js';
-import { childEnv, YT_DLP } from './env.js';
+import {
+  getNextApprovedVideo,
+  updateVideoStatus,
+  getChannelById,
+  type Video,
+  type Channel,
+} from './db.js';
+import { childEnv, YT_DLP, MEDIA_DIR, INCOMING_DIR, DRY_RUN } from './env.js';
 
-const DRY_RUN = process.env.DRY_RUN === 'true';
-const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
 const MIN_FREE_SPACE_BYTES = 1024 * 1024 * 1024; // 1 GB
+const DOWNLOAD_TIMEOUT_MS = 2 * 60 * 60 * 1000;  // 2 h: a hung yt-dlp must not block the queue forever
+const MAX_ERROR_CHARS = 2000;
 
 let isDownloading = false;
 
+export interface CurrentDownload {
+  id: number;
+  title: string;
+  startedAt: string;
+}
+let current: CurrentDownload | null = null;
+
+/** What the downloader is working on right now, for the UI. */
+export function getCurrentDownload(): CurrentDownload | null {
+  return current;
+}
+
 /**
- * Download all approved videos sequentially.
- * Called after the daily poll completes, and also triggered immediately
- * when a parent approves a video or adds a single video via the UI.
+ * Download every approved video, one at a time, oldest approval first.
+ * Safe to call from anywhere at any time: if a loop is already running it
+ * simply returns, and the running loop will pick up newly approved rows.
  */
 export async function downloadAllApproved(): Promise<void> {
-  if (isDownloading) {
-    console.log('[Downloader] Already downloading, skipping');
-    return;
-  }
-
+  if (isDownloading) return;
   isDownloading = true;
   try {
     while (true) {
-      // Check disk space before each download
-      try {
-        const stats = fs.statfsSync(MEDIA_DIR);
-        const freeBytes = stats.bfree * stats.bsize;
-        if (freeBytes < MIN_FREE_SPACE_BYTES) {
-          const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(1);
-          console.error(`[Downloader] Low disk space (${freeGB} GB free), pausing downloads`);
-          break;
-        }
-      } catch {
-        // If we can't check disk space (e.g. drive not mounted), stop downloading
-        console.error('[Downloader] Cannot check disk space — is the media drive mounted?');
-        break;
-      }
-
-      const approved = getApprovedVideos();
-      if (approved.length === 0) break;
-
-      const video = approved[0];
+      if (!hasFreeSpace()) break;
+      const video = getNextApprovedVideo();
+      if (!video) break;
       const channel = video.channel_id ? getChannelById(video.channel_id) : undefined;
       await downloadOne(video, channel);
     }
   } finally {
     isDownloading = false;
+    current = null;
+  }
+}
+
+function hasFreeSpace(): boolean {
+  try {
+    const stats = fs.statfsSync(MEDIA_DIR);
+    const freeBytes = stats.bfree * stats.bsize;
+    if (freeBytes < MIN_FREE_SPACE_BYTES) {
+      console.error(`[Downloader] Low disk space (${(freeBytes / 1024 ** 3).toFixed(1)} GB free), pausing downloads`);
+      return false;
+    }
+    return true;
+  } catch {
+    console.error('[Downloader] Cannot check disk space. Is the media drive mounted?');
+    return false;
   }
 }
 
 async function downloadOne(video: Video, channel?: Channel): Promise<void> {
   const minDuration = channel?.min_duration ?? 0;
-  console.log(`[Downloader] Starting download: "${video.title}" (${video.youtube_id})${minDuration ? ` [min ${minDuration}s]` : ''}`);
-  updateVideoStatus(video.id, 'downloading');
+  console.log(`[Downloader] Starting: "${video.title}" (${video.youtube_id})`);
+  updateVideoStatus(video.id, 'downloading', { error_message: null });
+  current = { id: video.id, title: video.title, startedAt: new Date().toISOString() };
 
   try {
     if (DRY_RUN) {
-      console.log(`[Downloader] DRY_RUN: Skipping yt-dlp for "${video.title}"`);
-      const fakePath = `${MEDIA_DIR}/DryRun/${video.youtube_id}.mp4`;
-      updateVideoStatus(video.id, 'done', { file_path: fakePath });
-      console.log(`[Downloader] DRY_RUN: Marked "${video.title}" as done`);
-    } else {
-      // Check if this is a "short" video that should go in the Shorts collection
-      let isShort = false;
-      if (minDuration > 0) {
-        const duration = await getVideoDuration(video.youtube_id);
-        if (duration !== null && duration <= minDuration) {
-          isShort = true;
-          console.log(`[Downloader] Short video (${duration}s <= ${minDuration}s): "${video.title}"`);
-        }
-      }
-
-      // Quality: video override (single videos) > channel setting > 720 default
-      const maxQuality = video.max_quality ?? channel?.max_quality ?? 720;
-
-      const filePath = await downloadVideo(video.youtube_id, isShort, maxQuality);
-      updateVideoStatus(video.id, 'done', { file_path: filePath });
-
-      console.log(`[Downloader] Completed${isShort ? ' (short)' : ''}: "${video.title}"`);
+      await new Promise((r) => setTimeout(r, 1500));
+      updateVideoStatus(video.id, 'done', { file_path: `${MEDIA_DIR}/DryRun/${video.youtube_id}.mp4`, duration: 300 });
+      console.log(`[Downloader] DRY_RUN: marked "${video.title}" done`);
+      return;
     }
-  } catch (err: any) {
-    const errorMsg = err.message || String(err);
-    console.error(`[Downloader] Failed: "${video.title}" — ${errorMsg}`);
-    updateVideoStatus(video.id, 'error', { error_message: errorMsg });
-  }
-}
 
-/**
- * Get the duration of a YouTube video in seconds.
- * Returns null if duration can't be determined.
- */
-function getVideoDuration(youtubeId: string): Promise<number | null> {
-  return new Promise((resolve) => {
-    const url = `https://www.youtube.com/watch?v=${youtubeId}`;
-    execFile(YT_DLP, ['--print', 'duration', '--no-download', url], {
-      timeout: 60_000,
-      env: childEnv,
-    }, (error, stdout) => {
-      if (error) {
-        console.warn(`[Downloader] Could not get duration for ${youtubeId}, treating as full-length`);
-        resolve(null);
-        return;
-      }
-      const seconds = parseFloat(stdout.trim());
-      resolve(isNaN(seconds) ? null : seconds);
+    // Quality: per-video override (single videos) > channel setting > 720
+    const maxQuality = video.max_quality ?? channel?.max_quality ?? 720;
+
+    const result = await runYtDlp(video.youtube_id, maxQuality);
+
+    // Shorts routing uses the duration yt-dlp reported during the download,
+    // so there is no separate metadata call per video any more.
+    const isShort = minDuration > 0 && result.duration !== null && result.duration <= minDuration;
+    const finalPath = moveIntoLibrary(result.filePath, isShort);
+    if (isShort) ensureShortsFolderJpg(path.basename(path.dirname(finalPath)));
+
+    updateVideoStatus(video.id, 'done', {
+      file_path: finalPath,
+      duration: result.duration,
+      ...(result.uploadDate ? { published_at: result.uploadDate } : {}),
     });
-  });
-}
-
-/**
- * Fetch a YouTube channel's avatar and save it as folder.jpg in the channel's media directory.
- * Infuse uses folder.jpg as the folder thumbnail when browsing via SMB.
- */
-export async function fetchChannelAvatar(channelId: string, channelName: string): Promise<void> {
-  const channelDir = path.join(MEDIA_DIR, channelName);
-
-  try {
-    // Fetch the YouTube channel page and extract the avatar URL from og:image
-    const channelUrl = `https://www.youtube.com/channel/${channelId}`;
-    const res = await fetch(channelUrl);
-    if (!res.ok) {
-      console.warn(`[Avatar] Failed to fetch channel page: HTTP ${res.status}`);
-      return;
-    }
-
-    const html = await res.text();
-    const match = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
-    if (!match) {
-      console.warn(`[Avatar] No og:image found for ${channelName}`);
-      return;
-    }
-
-    const avatarUrl = match[1];
-
-    // Download the avatar image
-    const imgRes = await fetch(avatarUrl);
-    if (!imgRes.ok) {
-      console.warn(`[Avatar] Failed to download avatar: HTTP ${imgRes.status}`);
-      return;
-    }
-
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-
-    // Save to the channel's media folder (create if needed)
-    fs.mkdirSync(channelDir, { recursive: true });
-    const folderJpg = path.join(channelDir, 'folder.jpg');
-    fs.writeFileSync(folderJpg, buffer);
-    console.log(`[Avatar] Saved folder.jpg for ${channelName}`);
-  } catch (err) {
-    console.error(`[Avatar] Error fetching avatar for ${channelName}:`, err);
+    console.log(`[Downloader] Done${isShort ? ' (short)' : ''}: "${video.title}" -> ${finalPath}`);
+  } catch (err: any) {
+    const msg = String(err?.message || err).slice(-MAX_ERROR_CHARS);
+    console.error(`[Downloader] Failed: "${video.title}" - ${msg}`);
+    updateVideoStatus(video.id, 'error', { error_message: msg });
+  } finally {
+    current = null;
   }
 }
 
-function downloadVideo(youtubeId: string, isShort: boolean = false, maxQuality: number = 720): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Shorts go into a Shorts/ subfolder, grouped by channel
-    const baseDir = isShort ? `${MEDIA_DIR}/Shorts` : MEDIA_DIR;
-    const outputTemplate = `${baseDir}/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.%(ext)s`;
-    const url = `https://www.youtube.com/watch?v=${youtubeId}`;
+interface YtDlpResult {
+  filePath: string;
+  channel: string | null;
+  uploadDate: string | null; // YYYY-MM-DD
+  duration: number | null;   // seconds
+}
 
+/**
+ * Run yt-dlp for one video. Downloads into INCOMING_DIR/<channel>/ and
+ * prints one JSON line of metadata before the download plus the final
+ * file path after it, which is all we need to file the video correctly.
+ */
+function runYtDlp(youtubeId: string, maxQuality: number): Promise<YtDlpResult> {
+  return new Promise((resolve, reject) => {
+    const url = `https://www.youtube.com/watch?v=${youtubeId}`;
     const args = [
       '--format', `bestvideo[height<=${maxQuality}]+bestaudio/best[height<=${maxQuality}]`,
       '--merge-output-format', 'mp4',
@@ -169,18 +128,139 @@ function downloadVideo(youtubeId: string, isShort: boolean = false, maxQuality: 
       '--embed-thumbnail',
       '--embed-metadata',
       '--no-playlist',
+      '--no-progress',
+      '--print', '%(.{channel,upload_date,duration})j',
       '--print', 'after_move:filepath',
-      '-o', outputTemplate,
+      '-o', `${INCOMING_DIR}/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.%(ext)s`,
       url,
     ];
 
-    execFile(YT_DLP, args, { maxBuffer: 10 * 1024 * 1024, env: childEnv }, (error, stdout, stderr) => {
+    execFile(YT_DLP, args, {
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: DOWNLOAD_TIMEOUT_MS,
+      env: childEnv,
+    }, (error, stdout, stderr) => {
       if (error) {
-        reject(new Error(stderr || error.message));
+        reject(new Error(stderr?.trim() || error.message));
         return;
       }
-      const filePath = stdout.trim().split('\n').pop() || '';
-      resolve(filePath);
+      const lines = stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+      const filePath = lines[lines.length - 1] || '';
+      if (!filePath || !fs.existsSync(filePath)) {
+        reject(new Error(`yt-dlp finished but no file was produced (stdout: ${stdout.slice(0, 300)})`));
+        return;
+      }
+      let meta: { channel?: string; upload_date?: string; duration?: number } = {};
+      const jsonLine = lines.find((l) => l.startsWith('{'));
+      if (jsonLine) {
+        try { meta = JSON.parse(jsonLine); } catch { /* metadata is best-effort */ }
+      }
+      const raw = meta.upload_date;
+      const uploadDate = raw && /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : null;
+      const duration = typeof meta.duration === 'number' && Number.isFinite(meta.duration) ? Math.round(meta.duration) : null;
+      resolve({ filePath, channel: meta.channel ?? null, uploadDate, duration });
     });
   });
+}
+
+/**
+ * Move a finished download (and its .jpg sidecar) from INCOMING_DIR into the
+ * library. The channel folder name is whatever yt-dlp sanitized it to, so it
+ * matches folders created by earlier versions.
+ */
+function moveIntoLibrary(incomingPath: string, isShort: boolean): string {
+  const channelFolder = path.basename(path.dirname(incomingPath));
+  const destDir = isShort ? path.join(MEDIA_DIR, 'Shorts', channelFolder) : path.join(MEDIA_DIR, channelFolder);
+  fs.mkdirSync(destDir, { recursive: true });
+
+  const base = incomingPath.slice(0, -path.extname(incomingPath).length);
+  const sidecar = `${base}.jpg`;
+  const dest = path.join(destDir, path.basename(incomingPath));
+
+  moveFile(incomingPath, dest);
+  if (fs.existsSync(sidecar)) moveFile(sidecar, path.join(destDir, path.basename(sidecar)));
+
+  try { fs.rmdirSync(path.dirname(incomingPath)); } catch { /* not empty or already gone */ }
+  return dest;
+}
+
+function moveFile(from: string, to: string): void {
+  try {
+    fs.renameSync(from, to);
+  } catch (err: any) {
+    if (err.code !== 'EXDEV') throw err;
+    fs.copyFileSync(from, to);
+    fs.unlinkSync(from);
+  }
+}
+
+/** Give Shorts/<channel>/ the same folder.jpg as the main channel folder. */
+function ensureShortsFolderJpg(channelFolder: string): void {
+  const src = path.join(MEDIA_DIR, channelFolder, 'folder.jpg');
+  const dst = path.join(MEDIA_DIR, 'Shorts', channelFolder, 'folder.jpg');
+  try {
+    if (fs.existsSync(src) && !fs.existsSync(dst)) fs.copyFileSync(src, dst);
+  } catch (err) {
+    console.warn(`[Downloader] Could not copy folder.jpg for Shorts/${channelFolder}:`, err);
+  }
+}
+
+/**
+ * Fetch a YouTube channel's avatar and save it as folder.jpg in the channel's
+ * media directory (and its Shorts folder, if that exists). Infuse uses
+ * folder.jpg as the folder thumbnail when browsing over SMB.
+ */
+export async function fetchChannelAvatar(channelId: string, channelName: string): Promise<void> {
+  if (DRY_RUN) return;
+  const channelDir = path.join(MEDIA_DIR, channelName);
+  try {
+    const res = await fetch(`https://www.youtube.com/channel/${channelId}`);
+    if (!res.ok) {
+      console.warn(`[Avatar] Channel page for ${channelName}: HTTP ${res.status}`);
+      return;
+    }
+    const html = await res.text();
+    const match = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
+    if (!match) {
+      console.warn(`[Avatar] No og:image found for ${channelName}`);
+      return;
+    }
+    const imgRes = await fetch(match[1]);
+    if (!imgRes.ok) {
+      console.warn(`[Avatar] Avatar download for ${channelName}: HTTP ${imgRes.status}`);
+      return;
+    }
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    fs.mkdirSync(channelDir, { recursive: true });
+    fs.writeFileSync(path.join(channelDir, 'folder.jpg'), buffer);
+    const shortsDir = path.join(MEDIA_DIR, 'Shorts', channelName);
+    if (fs.existsSync(shortsDir)) fs.writeFileSync(path.join(shortsDir, 'folder.jpg'), buffer);
+    console.log(`[Avatar] Saved folder.jpg for ${channelName}`);
+  } catch (err) {
+    console.error(`[Avatar] Error fetching avatar for ${channelName}:`, err);
+  }
+}
+
+/**
+ * Remove a video file and its .jpg sidecar from disk. Missing files are not
+ * an error. Returns true if anything was removed.
+ */
+export function removeVideoFiles(filePath: string): boolean {
+  let removed = false;
+  const base = filePath.slice(0, -path.extname(filePath).length);
+  for (const p of [filePath, `${base}.jpg`]) {
+    try {
+      fs.unlinkSync(p);
+      removed = true;
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') console.warn(`[Files] Could not remove ${p}:`, err.message);
+    }
+  }
+  // Tidy an emptied channel folder (only folder.jpg / .DS_Store left)
+  const dir = path.dirname(filePath);
+  try {
+    const rest = fs.readdirSync(dir).filter((f) => !['folder.jpg', '.DS_Store'].includes(f));
+    if (rest.length === 0) fs.rmSync(dir, { recursive: true, force: true });
+  } catch { /* ignore */ }
+  return removed;
 }

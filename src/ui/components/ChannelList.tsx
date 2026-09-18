@@ -1,214 +1,107 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import type { Channel, Video } from '../lib/types';
+import { api, errorMessage } from '../lib/api';
+import { btn, card, colors, label } from '../lib/styles';
 import { AddChannelForm } from './AddChannelForm';
-
-interface Channel {
-  id: number;
-  name: string;
-  channel_id: string;
-  channel_url: string;
-  from_date: string;
-  auto_approve: number;
-  min_duration: number;
-  max_quality: number;
-  video_count: number;
-  pending_count: number;
-}
+import { DatePresetPicker, dateFromPreset, MinLengthSelect, QualitySelect, type DatePreset } from './DatePresetPicker';
+import { VideoRow } from './VideoRow';
 
 interface Props {
   onAction: () => void;
 }
 
-type DatePreset = '6months' | '1year' | '2years' | 'all' | 'custom';
-
-function getDateFromPreset(preset: DatePreset): string {
-  const now = new Date();
-  switch (preset) {
-    case '6months':
-      now.setMonth(now.getMonth() - 6);
-      return now.toISOString().split('T')[0];
-    case '1year':
-      now.setFullYear(now.getFullYear() - 1);
-      return now.toISOString().split('T')[0];
-    case '2years':
-      now.setFullYear(now.getFullYear() - 2);
-      return now.toISOString().split('T')[0];
-    case 'all':
-      return '2005-01-01';
-    case 'custom':
-      return now.toISOString().split('T')[0];
-  }
-}
-
-function EditChannelForm({ channel, onSave, onCancel }: {
+function EditChannelForm({ channel, onSaved, onCancel, onError }: {
   channel: Channel;
-  onSave: () => void;
+  onSaved: () => void;
   onCancel: () => void;
+  onError: (msg: string) => void;
 }) {
-  const [datePreset, setDatePreset] = useState<DatePreset>('custom');
+  const [preset, setPreset] = useState<DatePreset>('custom');
   const [customDate, setCustomDate] = useState(channel.from_date);
   const [autoApprove, setAutoApprove] = useState(!!channel.auto_approve);
   const [minDuration, setMinDuration] = useState(channel.min_duration ?? 120);
   const [maxQuality, setMaxQuality] = useState(channel.max_quality ?? 720);
   const [saving, setSaving] = useState(false);
 
-  const fromDate = datePreset === 'custom' ? customDate : getDateFromPreset(datePreset);
+  const fromDate = dateFromPreset(preset, customDate);
 
-  const handleSave = async () => {
+  const save = async () => {
     setSaving(true);
     try {
-      await fetch(`/api/channels/${channel.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromDate, autoApprove, minDuration, maxQuality }),
-      });
-      onSave();
+      await api(`/api/channels/${channel.id}`, { method: 'PATCH', json: { fromDate, autoApprove, minDuration, maxQuality } });
+      onSaved();
     } catch (err) {
-      console.error('Failed to update channel:', err);
+      onError(`Could not save ${channel.name}: ${errorMessage(err)}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const presetButtonStyle = (active: boolean): React.CSSProperties => ({
-    padding: '5px 10px',
-    border: active ? '2px solid #2563eb' : '1px solid #ddd',
-    borderRadius: 6,
-    background: active ? '#eff6ff' : '#fff',
-    color: active ? '#2563eb' : '#333',
-    cursor: 'pointer',
-    fontSize: 12,
-    fontWeight: active ? 600 : 400,
-  });
+  return (
+    <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12, marginTop: 10, border: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div>
+        <label style={label}>Download videos from</label>
+        <DatePresetPicker compact preset={preset} customDate={customDate} onChange={(p, d) => { setPreset(p); setCustomDate(d); }} />
+        <div style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>
+          Moving this earlier does not fetch older videos by itself. Save, then press <strong>Find videos</strong>.
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 180px' }}>
+          <label style={label}>Short videos</label>
+          <MinLengthSelect small value={minDuration} onChange={setMinDuration} />
+        </div>
+        <div>
+          <label style={label}>Quality</label>
+          <QualitySelect small value={maxQuality} onChange={setMaxQuality} />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', paddingBottom: 6 }}>
+          <input type="checkbox" checked={autoApprove} onChange={(e) => setAutoApprove(e.target.checked)} style={{ width: 16, height: 16 }} />
+          Auto-download new videos
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={save} disabled={saving} style={btn('primary', { small: true, disabled: saving })}>{saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={onCancel} style={btn('subtle', { small: true })}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function ChannelVideos({ channelId, onError, onAction }: { channelId: number; onError: (m: string) => void; onAction: () => void }) {
+  const [videos, setVideos] = useState<Video[] | null>(null);
+  const [filter, setFilter] = useState<'all' | 'done' | 'error' | 'pending'>('all');
+
+  const load = useCallback(() => {
+    api<Video[]>(`/api/channels/${channelId}/videos`).then(setVideos).catch((err) => onError(errorMessage(err)));
+  }, [channelId, onError]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  if (!videos) return <p style={{ color: colors.muted, fontSize: 13, padding: 8 }}>Loading…</p>;
+
+  const shown = videos.filter((v) => filter === 'all' || v.status === filter);
+  const count = (s: string) => videos.filter((v) => v.status === s).length;
+  const chip = (f: typeof filter, text: string) => (
+    <button key={f} onClick={() => setFilter(f)} style={btn(filter === f ? 'primary' : 'subtle', { small: true })}>{text}</button>
+  );
 
   return (
-    <div style={{
-      background: '#f8fafc',
-      borderRadius: 8,
-      padding: 12,
-      marginTop: 8,
-      border: '1px solid #e2e8f0',
-    }}>
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: '#555' }}>
-          Download videos from
-        </label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => setDatePreset('6months')} style={presetButtonStyle(datePreset === '6months')}>
-            Last 6 months
-          </button>
-          <button type="button" onClick={() => setDatePreset('1year')} style={presetButtonStyle(datePreset === '1year')}>
-            Last year
-          </button>
-          <button type="button" onClick={() => setDatePreset('2years')} style={presetButtonStyle(datePreset === '2years')}>
-            Last 2 years
-          </button>
-          <button type="button" onClick={() => setDatePreset('all')} style={presetButtonStyle(datePreset === 'all')}>
-            All time
-          </button>
-          <button type="button" onClick={() => setDatePreset('custom')} style={presetButtonStyle(datePreset === 'custom')}>
-            Custom
-          </button>
-        </div>
-        {datePreset === 'custom' && (
-          <input
-            type="date"
-            value={customDate}
-            onChange={(e) => setCustomDate(e.target.value)}
-            style={{
-              marginTop: 6,
-              padding: '6px 10px',
-              border: '1px solid #ddd',
-              borderRadius: 6,
-              fontSize: 13,
-            }}
-          />
-        )}
+    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {chip('all', `All ${videos.length}`)}
+        {chip('done', `Downloaded ${count('done')}`)}
+        {count('pending') > 0 && chip('pending', `Waiting ${count('pending')}`)}
+        {count('error') > 0 && chip('error', `Failed ${count('error')}`)}
       </div>
-
-      <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={autoApprove}
-            onChange={(e) => setAutoApprove(e.target.checked)}
-            style={{ width: 16, height: 16 }}
-          />
-          Auto-approve new videos
-        </label>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Min length</label>
-          <select
-            value={minDuration}
-            onChange={(e) => setMinDuration(Number(e.target.value))}
-            style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              borderRadius: 6,
-              fontSize: 12,
-              background: '#fff',
-            }}
-          >
-            <option value={0}>No filter</option>
-            <option value={60}>1 minute</option>
-            <option value={120}>2 minutes</option>
-            <option value={180}>3 minutes</option>
-            <option value={300}>5 minutes</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Quality</label>
-          <select
-            value={maxQuality}
-            onChange={(e) => setMaxQuality(Number(e.target.value))}
-            style={{
-              padding: '4px 8px',
-              border: '1px solid #ddd',
-              borderRadius: 6,
-              fontSize: 12,
-              background: '#fff',
-            }}
-          >
-            <option value={480}>480p</option>
-            <option value={720}>720p</option>
-            <option value={1080}>1080p</option>
-          </select>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            padding: '6px 14px',
-            background: '#2563eb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            cursor: saving ? 'not-allowed' : 'pointer',
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button
-          onClick={onCancel}
-          style={{
-            padding: '6px 14px',
-            background: '#f1f5f9',
-            color: '#333',
-            border: '1px solid #ddd',
-            borderRadius: 6,
-            cursor: 'pointer',
-            fontSize: 13,
-          }}
-        >
-          Cancel
-        </button>
-      </div>
+      {shown.length === 0 && <p style={{ color: colors.muted, fontSize: 13, padding: 8 }}>No videos here.</p>}
+      {shown.map((v) => (
+        <VideoRow key={v.id} video={v} showChannel={false} onChanged={() => { load(); onAction(); }} onError={onError} />
+      ))}
     </div>
   );
 }
@@ -218,134 +111,132 @@ export function ChannelList({ onAction }: Props) {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  const fetchChannels = () => {
-    fetch('/api/channels')
-      .then((r) => r.json())
-      .then((data) => {
-        setChannels(data);
-        setLoading(false);
-      })
-      .catch(console.error);
-  };
+  const showError = useCallback((text: string) => setNotice({ ok: false, text }), []);
+
+  const fetchChannels = useCallback(() => {
+    api<Channel[]>('/api/channels')
+      .then((data) => { setChannels(data); setLoading(false); })
+      .catch((err) => showError(errorMessage(err)));
+  }, [showError]);
 
   useEffect(() => {
     fetchChannels();
-  }, []);
+    const t = setInterval(fetchChannels, 20_000);
+    return () => clearInterval(t);
+  }, [fetchChannels]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Remove this channel? Downloaded files will not be deleted.')) return;
-    await fetch(`/api/channels/${id}`, { method: 'DELETE' });
-    fetchChannels();
-    onAction();
+  const changed = () => { fetchChannels(); onAction(); };
+
+  const handleDelete = async (ch: Channel) => {
+    if (!confirm(`Remove ${ch.name}? It will stop checking for new videos.`)) return;
+    const deleteFiles = ch.done_count > 0 && confirm(
+      `Also delete the ${ch.done_count} downloaded video${ch.done_count === 1 ? '' : 's'} from the drive?\n\nOK = delete the files too.\nCancel = keep the files so Infuse can still play them.`,
+    );
+    setBusyId(ch.id);
+    try {
+      const r = await api<{ filesRemoved: number }>(`/api/channels/${ch.id}?deleteFiles=${deleteFiles}`, { method: 'DELETE' });
+      setNotice({ ok: true, text: deleteFiles ? `Removed ${ch.name} and ${r.filesRemoved} file${r.filesRemoved === 1 ? '' : 's'}.` : `Removed ${ch.name}. Files were kept.` });
+      changed();
+    } catch (err) {
+      showError(`Could not remove ${ch.name}: ${errorMessage(err)}`);
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleAdded = () => {
-    setShowAdd(false);
-    fetchChannels();
-    onAction();
+  const handleBackfill = async (ch: Channel) => {
+    setBusyId(ch.id);
+    try {
+      await api(`/api/channels/${ch.id}/backfill`, { method: 'POST' });
+      setNotice({ ok: true, text: `Looking for videos from ${ch.name} since ${ch.from_date}. New ones will appear over the next few minutes.` });
+      onAction();
+    } catch (err) {
+      showError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleEditSave = () => {
-    setEditingId(null);
-    fetchChannels();
-    onAction();
-  };
-
-  if (loading) return <p style={{ padding: 20, color: '#888' }}>Loading...</p>;
+  if (loading) return <p style={{ padding: 20, color: colors.muted }}>Loading…</p>;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600 }}>Channels ({channels.length})</h2>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          style={{
-            padding: '8px 16px',
-            background: '#2563eb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
-          {showAdd ? 'Cancel' : 'Add Channel'}
-        </button>
+        <button onClick={() => setShowAdd(!showAdd)} style={btn(showAdd ? 'subtle' : 'primary')}>{showAdd ? 'Cancel' : 'Add channel'}</button>
       </div>
 
-      {showAdd && <AddChannelForm onAdded={handleAdded} />}
+      {showAdd && (
+        <AddChannelForm onAdded={(name) => {
+          setShowAdd(false);
+          setNotice({ ok: true, text: `Added ${name}. Finding its videos now; they will show up over the next few minutes.` });
+          changed();
+        }} />
+      )}
+
+      {notice && (
+        <div style={{ ...card, marginBottom: 12, fontSize: 13, color: notice.ok ? colors.success : colors.danger, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span>{notice.text}</span>
+          <button style={btn('subtle', { small: true })} onClick={() => setNotice(null)}>Dismiss</button>
+        </div>
+      )}
 
       {channels.length === 0 && !showAdd && (
-        <p style={{ color: '#888' }}>No channels added yet. Click "Add Channel" to get started.</p>
+        <p style={{ color: colors.muted }}>No channels yet. Press "Add channel" to get started.</p>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {channels.map((ch) => (
-          <div
-            key={ch.id}
-            style={{
-              background: '#fff',
-              borderRadius: 8,
-              padding: '12px 16px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{ch.name}</div>
-                <div style={{ fontSize: 13, color: '#888' }}>
-                  Since {ch.from_date} &middot; {ch.video_count} video{ch.video_count !== 1 ? 's' : ''}{' '}
-                  {ch.pending_count > 0 && `(${ch.pending_count} pending)`} &middot;{' '}
-                  {ch.auto_approve ? 'Auto-approve' : 'Manual review'}
-                  {ch.min_duration > 0 && ` · Min ${Math.floor(ch.min_duration / 60)}m`}
-                  {` · ${ch.max_quality || 720}p`}
+        {channels.map((ch) => {
+          const busy = busyId === ch.id;
+          const open = openId === ch.id;
+          return (
+            <div key={ch.id} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{ch.name}</div>
+                  <div style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
+                    {ch.done_count} downloaded
+                    {ch.pending_count > 0 && <span style={{ color: colors.primary }}> · {ch.pending_count} waiting for approval</span>}
+                    {ch.error_count > 0 && <span style={{ color: colors.danger }}> · {ch.error_count} failed</span>}
+                    {' · since '}{ch.from_date}
+                    {' · '}{ch.auto_approve ? 'auto-download' : 'manual approval'}
+                    {ch.min_duration > 0 ? ` · shorts under ${Math.round(ch.min_duration / 60)} min` : ''}
+                    {` · ${ch.max_quality || 720}p`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button onClick={() => setOpenId(open ? null : ch.id)} style={btn(open ? 'primary' : 'ghost', { small: true })}>
+                    {open ? 'Hide videos' : 'Videos'}
+                  </button>
+                  <button onClick={() => handleBackfill(ch)} disabled={busy} style={btn('ghost', { small: true, disabled: busy })} title="Check YouTube for videos back to the start date">
+                    Find videos
+                  </button>
+                  <button onClick={() => setEditingId(editingId === ch.id ? null : ch.id)} style={btn('subtle', { small: true })}>
+                    {editingId === ch.id ? 'Cancel' : 'Settings'}
+                  </button>
+                  <button onClick={() => handleDelete(ch)} disabled={busy} style={btn('danger', { small: true, disabled: busy })}>
+                    Remove
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setEditingId(editingId === ch.id ? null : ch.id)}
-                  style={{
-                    padding: '6px 12px',
-                    background: '#f0f9ff',
-                    color: '#2563eb',
-                    border: 'none',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  {editingId === ch.id ? 'Cancel' : 'Edit'}
-                </button>
-                <button
-                  onClick={() => handleDelete(ch.id)}
-                  style={{
-                    padding: '6px 12px',
-                    background: '#fee2e2',
-                    color: '#dc2626',
-                    border: 'none',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
 
-            {editingId === ch.id && (
-              <EditChannelForm
-                channel={ch}
-                onSave={handleEditSave}
-                onCancel={() => setEditingId(null)}
-              />
-            )}
-          </div>
-        ))}
+              {editingId === ch.id && (
+                <EditChannelForm
+                  channel={ch}
+                  onSaved={() => { setEditingId(null); setNotice({ ok: true, text: `Saved ${ch.name}.` }); changed(); }}
+                  onCancel={() => setEditingId(null)}
+                  onError={showError}
+                />
+              )}
+
+              {open && <ChannelVideos channelId={ch.id} onError={showError} onAction={changed} />}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

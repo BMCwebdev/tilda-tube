@@ -1,57 +1,88 @@
 # Handoff Notes
 
-## What We've Been Building
+Last updated 2026-09-17.
 
-TildaTube started as a basic RSS poller + downloader and has evolved through several iterations into a fairly complete system. The major arcs of work have been:
+## What this is
 
-1. **Getting yt-dlp to actually run** — Multiple rounds of PATH/env debugging. yt-dlp requires Deno for YouTube extraction, and child processes don't inherit the full shell environment. Solved by hardcoding `/usr/local/bin/yt-dlp` and passing a custom `childEnv` from `env.ts` with Homebrew paths.
+TildaTube: a curated YouTube library for a kid. Parents manage it from a phone at
+`http://brians-mac-mini.local:3001`; the kid watches through Infuse on the Apple TV over SMB.
+See `README.md` for setup and daily use, `CLAUDE.md` for architecture and patterns.
 
-2. **Channel management UX** — Added date presets, edit forms, custom date ranges, per-channel duration filters (for routing Shorts), and per-channel/per-video quality settings (480/720/1080).
+## State of the deployment
 
-3. **Shorts handling** — Videos shorter than a channel's `min_duration` go into `MEDIA_DIR/Shorts/ChannelName/` instead of the main channel folder. Infuse shows these as separate browsable folders.
+- The Mac mini runs from `~/tilda-tube` (pull-only clone) via the launchd job `com.tildatube`.
+- **As of 2026-09-17 the changes below are built and tested on the laptop but NOT yet deployed.**
+  The mini was on `88203f5` and, at the time of writing, the app was only running because
+  someone started `node dist/server.js` by hand in a terminal; the launchd job had been
+  failing with exit 78 for months.
 
-4. **Full backfill on channel add** — RSS only gives ~15 recent videos. When you add a channel, `backfillChannel()` now runs `yt-dlp --flat-playlist` to discover ALL videos back to the channel's `from_date`. This is the "more than 15 videos" change mentioned below.
+## What changed on 2026-09-17 (one big change set)
 
-5. **Plex → Infuse migration** — Originally built with Plex as the playback app. The 2012 Mac Mini couldn't handle Plex transcoding, so we switched to Infuse (Apple TV app) which plays all formats natively over SMB. Plex integration code (`plex.ts`, `nfo.ts`) has been fully removed.
+Why: downloads had been failing since August with HTTP 403 because yt-dlp could not find Deno
+(installed at `~/.deno/bin`, which was on no PATH the app used); "Remove channel" never worked
+(foreign-key error hidden by the UI); the API passed user-supplied URLs to a shell; and there
+was no way to retry, delete, or import anything.
 
-## Last Thing We Did
+Backend:
+- `env.ts` is now the one config module (`MEDIA_DIR`, `INCOMING_DIR`, `DRY_RUN`, `FFMPEG`, PATH with `~/.deno/bin`).
+- `api.ts`: no more `shell: true`; every URL validated; all handlers return JSON errors; new
+  routes for channel videos, retry, delete video, bulk actions, folders, import; single-video
+  add is one yt-dlp call with `--no-playlist` and records the real upload date.
+- `db.ts`: `source` and `duration` columns, indexes, `deleteChannel()` in a transaction,
+  `resetStuckDownloads()`, `repairPublishedDates()` (771 rows had "NA" as a date; fixed from file names).
+- `downloader.ts`: downloads land in `MEDIA_DIR/.incoming/` and are moved when complete;
+  duration comes from the download run (the separate 40-second metadata call per video is gone);
+  2-hour timeout; Shorts folders get a `folder.jpg`; `removeVideoFiles()`.
+- `poller.ts`: backfill parses one JSON object per line instead of "every 3 lines is a video".
+- `localimport.ts` (new): stream an uploaded file into the library with an ffmpeg thumbnail.
+- `server.ts`: JSON 404 for `/api/*`, error middleware, 10-minute download sweep, stuck-download reset.
+- `com.tildatube.plist`: logs under `~/Library/Logs/` (the external-drive log path is the likely
+  cause of exit 78 on Catalina), `~/.deno/bin` on PATH, installed with a `sed` instead of hand edits.
 
-Removed all Plex integration from the codebase:
-- Deleted `src/plex.ts` (API collection tagging) and `src/nfo.ts` (NFO sidecar files)
-- Removed Plex imports and calls from `server.ts` and `downloader.ts`
-- Removed `getDownloadedVideosWithChannel()` from `db.ts` (was only used by Plex backfill)
-- Removed `PLEX_TOKEN` from `com.tildatube.plist`
-- Updated README.md, CLAUDE.md, STATUS.md to reflect Infuse over SMB
+UI:
+- Shared `lib/` (api client, styles, types) and `VideoRow` with status-appropriate actions
+  (Approve/Reject, Retry, Remove, Delete file, Download again).
+- Queue: multi-select with bulk approve/reject, "Approve all".
+- Channels: settings, **Find videos** (backfill, previously API-only), Remove with a "delete
+  files too?" choice, expandable per-channel video list with filters. Errors are shown, not swallowed.
+- Library: auto-refresh, Downloaded/Failed/Rejected/Everything filters, search, channel filter,
+  "Retry all", and **Import a file** with upload progress.
+- Header shows the current download and background jobs.
 
-## What Has NOT Been Deployed Yet
+## To deploy
 
-The Mac Mini is running an older build. Everything from **"Add yt-dlp full backfill on channel add"** (`429a824`) onward has NOT been deployed. That includes:
-
-- Full backfill on channel add (the big one — will discover all historical videos for existing channels)
-- Per-channel/per-video quality settings
-- Plex removal (the Mac Mini still has the old Plex code, but it's harmless — just logs "No PLEX_TOKEN set, skipping")
-
-### To deploy all pending changes on the Mac Mini:
+Follow the ops runbook (private, outside this repo). In short, on the mini:
 
 ```bash
-cd ~/tilda-tube
-git pull
-npm install --production
-
-# Reload the service
-launchctl unload ~/Library/LaunchAgents/com.tildatube.plist
-cp com.tildatube.plist ~/Library/LaunchAgents/
+ln -sf ~/.deno/bin/deno /usr/local/bin/deno && yt-dlp -U
+cd ~/tilda-tube && git checkout -- com.tildatube.plist && git pull && npm install --production
+launchctl unload ~/Library/LaunchAgents/com.tildatube.plist 2>/dev/null
+sed "s/USERNAME/$USER/g" com.tildatube.plist > ~/Library/LaunchAgents/com.tildatube.plist
+pkill -f "node dist/server.js"
 launchctl load ~/Library/LaunchAgents/com.tildatube.plist
+launchctl list | grep tildatube      # want a PID and status 0
+tail ~/Library/Logs/tildatube.out
 ```
 
-No `npm run build` needed — `dist/` is committed and up to date.
+Then in the UI: Library → Failed → Retry all.
 
-**Heads up:** On first startup after deploy, the server will run the initial sync, which now includes full backfill for any channels added since the last deploy. This may take a while — check logs at `/Volumes/TildaTube/logs/tildatube.out`.
+## Known gotchas
 
-## Known Gotchas / Context for Next Agent
+- **`dist/` is committed.** Always `npm run build` before committing source changes.
+- **The mini can't build.** Vite/esbuild binaries need macOS 12+. `npm install --production` there skips them.
+- **Deno is not from Homebrew** on the mini; it lives in `~/.deno/bin`. If YouTube downloads
+  fail with 403 and the error mentions "No supported JavaScript runtime", PATH lost it again.
+- **yt-dlp goes stale in ~90 days.** `yt-dlp -U` is the first thing to try when downloads break.
+- Every yt-dlp call on the 2012 mini takes ~40 s just to start (Deno solving YouTube's challenge).
+- There is no test suite. Use the DRY_RUN smoke test described in `CLAUDE.md`.
+- Exit 78 from launchd means launchd itself failed before starting node (bad log path, TCC, etc).
+  It never writes a log line, so look at the plist, not the logs.
 
-- **Playback is via Infuse on Apple TV over SMB** — no Plex, no transcoding server. The Mac Mini just serves files via macOS File Sharing.
-- **DRY_RUN=true** skips all yt-dlp calls — use it for UI/API dev without downloading anything.
-- **The `dist/` folder is committed** — this is intentional so the Mac Mini doesn't need Node dev tooling. Always rebuild before committing if you change source.
-- **Database migrations are idempotent** — new columns use `ALTER TABLE` with `PRAGMA table_info` checks, safe to re-run.
-- **Single videos** (added via URL in the Queue tab) have `channel_id: null` and skip duration filtering.
+## Ideas not done yet
+
+- Remote viewing away from home: Tailscale on the mini + Apple TV + phone, Infuse over the
+  tunnel. Do not port-forward: the app has no authentication and the mini's OS is end-of-life.
+- Authentication on the web UI (a single shared PIN would do) before any remote access.
+- A visual "pick videos" browser with thumbnails and date range over a channel's full listing.
+- A proper design pass; the inline-style approach is consistent but plain.
+- SMB share currently allows guest read/write; consider requiring the account.

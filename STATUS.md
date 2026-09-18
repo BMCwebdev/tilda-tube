@@ -1,103 +1,56 @@
-# TildaTube - Setup Status Report
+# TildaTube - Status
 
-**Date:** 2026-03-23
-**Session:** Initial setup on Mac Mini (Intel)
+## 2026-09-17 — Audit and repair (laptop-side; deploy pending)
 
----
+**Found (on the mini):**
+- Service running only because it was started by hand in a terminal; the launchd job had
+  exited 78 every 10 s for 95 days without ever writing a log.
+- All full-length downloads since August failing with `HTTP Error 403` because yt-dlp could
+  not find Deno (`~/.deno/bin` was not on any PATH the app used). 61 errors, 2 rows stuck at
+  "downloading" since June, 5 `.part` files, 44 `.nfo` leftovers from Plex.
+- 771 of 1149 rows had `published_at = "NA"` (old backfill parser).
+- Remove channel never worked (foreign key), single-video add mangled URLs containing `&`,
+  and the API ran user URLs through a shell.
 
-## Completed
+**Done (code, built, smoke-tested against a copy of the production DB):**
+- [x] Deno on the child-process PATH and in the plist
+- [x] plist logs moved to `~/Library/Logs/` (likely exit-78 fix)
+- [x] `shell: true` removed; URL + input validation; JSON errors everywhere
+- [x] Channel removal works, with optional file deletion
+- [x] Retry / Remove / Delete file / Download again per video; bulk actions; "Retry all"
+- [x] "Find videos" (backfill) button in the UI
+- [x] Import your own video files (streamed upload, ffmpeg thumbnail)
+- [x] Downloads staged in `.incoming/` and moved when complete; one yt-dlp call per video instead of two
+- [x] Stuck downloads reset on startup; 10-minute download sweep
+- [x] "NA" dates repaired from file names on first start
+- [x] UI: shared components, per-channel video lists, search/filters, status bar with current download
 
-- [x] External HDD formatted as **exFAT**, named **TildaTube**, mounted at `/Volumes/TildaTube/`
-- [x] Created `/Volumes/TildaTube/media/` and `/Volumes/TildaTube/logs/` directories
-- [x] All code references updated from `TubeSafe` → `TildaTube` (db path, media path, plist logs, README)
-- [x] Database file renamed from `tubesafe.db` → `tildatube.db`
-- [x] `dist/` committed to repo so Mac Mini doesn't need to build (esbuild/Vite 6 incompatible with older macOS)
-- [x] `npm install --production` works on Mac Mini (skips vite, esbuild, typescript)
-- [x] `com.tildatube.plist` edited with username `brianandalisonmccarthy` and node path `/usr/local/bin/node`
-- [x] Server runs successfully via `node ~/tilda-tube/dist/server.js`
-- [x] Web UI accessible at `http://localhost:3001` on Mac Mini
-- [x] Web UI accessible at `http://192.168.0.76:3001` from iPhone and MacBook
-- [x] Prerequisites verified: Node v18.20.5, yt-dlp 2026.03.17, Deno 2.7.7, ffmpeg 8.1
-- [x] Fixed shell syntax error in downloader (`downloadVideo` was using `&&` outside shell context)
-- [x] YouTube channels added via web UI — RSS polling working for most channels
-- [x] ~~Plex Media Server installed on Mac Mini~~ — Removed in favor of Infuse over SMB
-- [x] SMB file sharing enabled on Mac Mini (System Preferences → Sharing → File Sharing + SMB)
-- [x] Infuse app installed on Apple TV, connected to Mac Mini via SMB
-- [x] Plex integration removed from codebase (plex.ts, nfo.ts deleted)
-
-## Issues Encountered
-
-### 1. esbuild/Vite incompatible with Mac Mini's macOS
-- **Error:** `dyld: Symbol not found: _SecTrustCopyCertificateChain` — esbuild binary requires macOS 12 (Monterey)+
-- **Fix:** Committed `dist/` to the repo and use `npm install --production` on the Mac Mini to skip dev dependencies entirely
-
-### 2. launchd service fails with exit code 78
-- **Symptom:** `launchctl list | grep tildatube` shows exit code `78`, no log files created
-- **Likely cause:** The logs directory didn't exist when the service first tried to start, and launchd may have cached the failure
-- **Status:** UNRESOLVED — server works when run manually, but not via launchd
-
-### 3. Transient 404 on one YouTube channel feed
-- **Symptom:** One channel's RSS feed returned HTTP 404 during polling
-- **Likely cause:** YouTube intermittent issue — the channel exists and works in browser
-- **Status:** Monitoring — will likely resolve on its own on the next poll cycle
-
-### 4. IP address may not be stable
-- **Current IP:** `192.168.0.76`
-- **Risk:** Router could reassign a different IP after reboot
-- **Recommendation:** Set a DHCP reservation in the router for the Mac Mini's MAC address, or use `brians-mac-mini.local` (Bonjour)
+**Not done / next:**
+- [ ] Deploy to the mini (runbook in the private ops folder)
+- [ ] Confirm exit 78 is gone after the plist change; if not, Full Disk Access for node
+- [ ] Remote viewing via Tailscale; a login PIN for the web UI before that
+- [ ] Visual video picker with thumbnails + date range
+- [ ] Design pass
+- [ ] Turn off SMB guest access
 
 ---
 
-## Next Iteration
+## 2026-03-23 — Initial setup on Mac Mini (Intel)
 
-### Fix launchd service (priority)
-- Unload/reload the plist now that the logs directory exists
-- If exit code 78 persists, check:
-  - Does the plist have correct file permissions?
-  - Is the working directory path correct?
-  - Try adding `/opt/homebrew/bin` or Deno's path to the PATH in the plist (yt-dlp needs Deno at runtime)
-- Verify the service survives a reboot
+- [x] External HDD formatted as exFAT, named TildaTube, mounted at `/Volumes/TildaTube/`
+- [x] `/Volumes/TildaTube/media/` and `/Volumes/TildaTube/logs/` created
+- [x] Renamed TubeSafe → TildaTube throughout
+- [x] `dist/` committed so the mini needs no build (esbuild/Vite need macOS 12+)
+- [x] `npm install --production` works on the mini
+- [x] Server runs manually; web UI reachable from iPhone and MacBook on the LAN
+- [x] Prerequisites: Node v18.20.5, yt-dlp, Deno 2.7.7 (via installer, in `~/.deno/bin`), ffmpeg
+- [x] SMB file sharing on; Infuse on the Apple TV browsing `media/`
+- [x] Plex removed in favour of Infuse (the 2012 mini cannot transcode)
 
-### Firewall check
-- Confirm macOS firewall allows incoming connections to `node` on port 3001
-- Test `brians-mac-mini.local:3001` from iPhone/MacBook as an alternative to the IP
+Issues from that session and their outcome:
+1. esbuild incompatible with the mini's macOS → solved by committing `dist/`.
+2. launchd exit 78 → diagnosed 2026-09-17 (log path on the external drive); fix in this change set.
+3. Transient 404 on one RSS feed → resolved itself.
+4. IP not stable → use `brians-mac-mini.local`; a DHCP reservation is still a good idea.
 
-### Static IP / DNS
-- Set DHCP reservation in router for `192.168.0.76`
-- Or confirm `brians-mac-mini.local` works reliably across devices
-
-### ~~Install and configure Plex~~ → Replaced with Infuse over SMB ✓ DONE
-- ~~Plex removed from codebase~~
-- SMB file sharing configured on Mac Mini
-- Infuse installed on Apple TV, browsing media folders over SMB
-
-### Energy Saver settings
-- Set computer sleep to **Never**
-- Enable **Wake for network access**
-- Enable **Start up automatically after a power failure**
-
-### Test the full flow end-to-end
-- Add a YouTube channel via the web UI
-- Verify RSS polling picks up videos
-- Approve a video and confirm it downloads to `/Volumes/TildaTube/media/`
-- Confirm the video appears in Infuse on Apple TV
-
----
-
-## Plex → Infuse Migration (2026-03-23/24)
-
-### Problem
-Plex on Apple TV showed "server is not powerful enough to convert the video" warnings. The 2012 Mac Mini (Ivy Bridge) has no hardware transcoding support.
-
-### Solution: Replaced Plex with Infuse over SMB ✓ DONE
-- **Infuse plays everything natively** on the Apple TV — VP9, H.264, HEVC, MKV. No server-side transcoding.
-- **Folder-based browsing** — `media/ChannelName/` structure shows up as browsable channel folders.
-- **No sideloading** — Infuse is in the App Store. Free tier is sufficient.
-- **Plex fully removed** from codebase — `plex.ts`, `nfo.ts` deleted, all API calls removed, `PLEX_TOKEN` removed from plist.
-
-### Remaining Questions
-
-- [ ] Does Infuse's folder browsing give a good enough "channel picker" experience?
-- [ ] Does `brians-mac-mini.local` work for SMB from Apple TV (vs hardcoded IP)?
-- [ ] Is the Shorts subfolder structure (`media/Shorts/ChannelName/`) intuitive in Infuse, or should we flatten it?
-- [ ] Should we add `folder.jpg` (channel profile pics) to improve folder thumbnails in Infuse?
+Energy Saver on the mini is correct: sleep never, wake for network, restart after power failure.

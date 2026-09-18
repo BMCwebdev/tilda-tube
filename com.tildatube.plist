@@ -5,22 +5,26 @@
     <key>Label</key>
     <string>com.tildatube</string>
 
+    <!--
+        Install: replace every "USERNAME" with your macOS short username, e.g.
+            sed "s/USERNAME/$USER/g" com.tildatube.plist > ~/Library/LaunchAgents/com.tildatube.plist
+            launchctl load ~/Library/LaunchAgents/com.tildatube.plist
+        Verify the node path with `which node` (Homebrew on Intel = /usr/local/bin/node).
+    -->
     <key>ProgramArguments</key>
     <array>
-        <!-- EDIT THIS: Replace with output of `which node` on Mac Mini -->
         <string>/usr/local/bin/node</string>
-        <!-- EDIT THIS: Replace USERNAME with your macOS username -->
         <string>/Users/USERNAME/tilda-tube/dist/server.js</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <!-- EDIT THIS: Replace USERNAME with your macOS username -->
     <string>/Users/USERNAME/tilda-tube</string>
 
     <key>EnvironmentVariables</key>
     <dict>
+        <!-- ~/.deno/bin is where the Deno installer puts deno; yt-dlp needs it for YouTube. -->
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>/usr/local/bin:/Users/USERNAME/.deno/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>NODE_ENV</key>
         <string>production</string>
     </dict>
@@ -31,10 +35,15 @@
     <key>KeepAlive</key>
     <true/>
 
+    <!--
+        Logs live on the boot disk, not the external drive. macOS Catalina and
+        later block launchd from opening files on removable volumes, which made
+        the job fail with exit code 78 before node ever started.
+    -->
     <key>StandardOutPath</key>
-    <string>/Volumes/TildaTube/logs/tildatube.out</string>
+    <string>/Users/USERNAME/Library/Logs/tildatube.out</string>
 
     <key>StandardErrorPath</key>
-    <string>/Volumes/TildaTube/logs/tildatube.err</string>
+    <string>/Users/USERNAME/Library/Logs/tildatube.err</string>
 </dict>
 </plist>

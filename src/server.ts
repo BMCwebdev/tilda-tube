@@ -1,66 +1,82 @@
-import express from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
-import { getDb, getAllChannels } from './db.js';
-import { router } from './api.js';
+import { getDb, getAllChannels, resetStuckDownloads } from './db.js';
+import { router, HttpError } from './api.js';
 import { pollChannels } from './poller.js';
 import { downloadAllApproved, fetchChannelAvatar } from './downloader.js';
-import fs from 'fs';
-import { join } from 'path';
+import { MEDIA_DIR } from './env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-// Initialize database
+// --- Database ---
 getDb();
-console.log('[Server] Database initialized');
+const stuck = resetStuckDownloads();
+if (stuck > 0) console.log(`[Server] ${stuck} interrupted download(s) marked as errors; retry them from the Library tab`);
+console.log('[Server] Database ready');
 
+if (!fs.existsSync(MEDIA_DIR)) {
+  console.error(`[Server] WARNING: media folder ${MEDIA_DIR} does not exist. Downloads will pause until the drive is mounted.`);
+}
+
+// --- HTTP ---
 const app = express();
 app.use(express.json());
-
-// API routes
 app.use(router);
 
-// Serve React UI
+// Unknown API routes get JSON, not the SPA shell
+app.use('/api', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 const uiPath = path.join(__dirname, 'ui');
 app.use(express.static(uiPath));
-app.get('*', (_req, res) => {
+app.get('*', (_req: Request, res: Response) => {
   res.sendFile(path.join(uiPath, 'index.html'));
 });
 
-// Start Express
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof HttpError) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  console.error('[Server] Unhandled error:', err);
+  res.status(500).json({ error: message || 'Internal error' });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
 });
 
-// Daily sync job at 2:00am: poll RSS feeds then download all approved videos
+// --- Scheduled work ---
+
 async function dailySyncJob() {
-  console.log(`[Cron] Starting daily sync at ${new Date().toISOString()}`);
+  console.log(`[Cron] Daily sync starting ${new Date().toISOString()}`);
   await pollChannels();
-  console.log('[Cron] Polling complete, starting downloads...');
   await downloadAllApproved();
-  console.log(`[Cron] Daily sync complete at ${new Date().toISOString()}`);
+  console.log(`[Cron] Daily sync complete ${new Date().toISOString()}`);
 }
 
 cron.schedule('0 2 * * *', () => {
   dailySyncJob().catch((err) => console.error('[Cron] Daily sync error:', err));
 });
 
-// Backfill folder.jpg avatars for existing channels that don't have one
-const MEDIA_DIR = process.env.MEDIA_DIR || '/Volumes/TildaTube/media';
-const channels = getAllChannels();
-for (const ch of channels) {
-  const folderJpg = join(MEDIA_DIR, ch.name, 'folder.jpg');
-  if (!fs.existsSync(folderJpg)) {
-    fetchChannelAvatar(ch.channel_id, ch.name).catch((err) =>
-      console.error(`[Server] Avatar backfill error for ${ch.name}:`, err)
-    );
+// Safety net: anything approved that a UI action failed to kick off gets picked up within 10 minutes.
+cron.schedule('*/10 * * * *', () => {
+  downloadAllApproved().catch((err) => console.error('[Cron] Sweep error:', err));
+});
+
+// Backfill folder.jpg avatars for channels that don't have one yet
+for (const ch of getAllChannels()) {
+  if (!fs.existsSync(path.join(MEDIA_DIR, ch.name, 'folder.jpg'))) {
+    fetchChannelAvatar(ch.channel_id, ch.name).catch((err) => console.error(`[Server] Avatar backfill for ${ch.name}:`, err));
   }
 }
 
-// Run initial sync on startup
 console.log('[Server] Running initial sync...');
 dailySyncJob().catch((err) => console.error('[Server] Initial sync error:', err));
-
-console.log('[Server] TildaTube is running (daily sync at 2:00am)');
+console.log('[Server] TildaTube is running (daily sync at 2:00am, download sweep every 10 min)');
