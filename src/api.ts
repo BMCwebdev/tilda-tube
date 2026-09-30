@@ -20,7 +20,7 @@ import {
   getServerStatus,
   type Video,
 } from './db.js';
-import { downloadAllApproved, fetchChannelAvatar, getCurrentDownload, removeVideoFiles } from './downloader.js';
+import { downloadAllApproved, fetchChannelAvatar, getCurrentDownload, removeVideoFiles, getLastYtDlpUpdate, updateYtDlp } from './downloader.js';
 import { backfillChannel } from './poller.js';
 import { importLocalFile, listLibraryFolders, ImportError } from './localimport.js';
 
@@ -195,11 +195,26 @@ router.get('/api/videos', wrap((_req, res) => {
 }));
 
 router.post('/api/videos', wrap(async (req, res) => {
-  const { url, maxQuality } = req.body ?? {};
+  const { url, maxQuality, channelId } = req.body ?? {};
   if (typeof url !== 'string' || !isYouTubeUrl(url)) throw new HttpError(400, 'Please paste a YouTube video URL');
   const quality = optionalQuality(maxQuality);
 
+  // Optional: file the video under one of the parent's channels (e.g. an older
+  // video outside the channel's date range). It then follows that channel's
+  // settings and shows up with the channel in the Library.
+  const chanId = optionalInt(channelId, 'channelId', 1, Number.MAX_SAFE_INTEGER);
+  const channel = chanId !== undefined ? getChannelById(chanId) : undefined;
+  if (chanId !== undefined && !channel) throw new HttpError(404, 'Channel not found');
+
   const info = await resolveVideo(url.trim());
+
+  // yt-dlp files the download under the video's own YouTube channel, so a
+  // video from a different channel would end up in the wrong folder on the drive.
+  if (channel && info.channelId && info.channelId !== channel.channel_id) {
+    throw new HttpError(400, `That video is from "${info.channelName || 'another channel'}", not ${channel.name}. Add it without picking a channel and it will be filed under its own channel folder.`);
+  }
+
+  const status = channel?.auto_approve ? 'approved' : 'pending';
 
   // Re-adding something previously rejected, deleted or failed just puts it back in the queue.
   const existing = getVideoByYoutubeId(info.id);
@@ -208,22 +223,24 @@ router.post('/api/videos', wrap(async (req, res) => {
       throw new HttpError(409, `"${existing.title}" is already in the library`);
     }
     if (existing.status === 'pending') throw new HttpError(409, `"${existing.title}" is already waiting for approval`);
-    updateVideoStatus(existing.id, 'pending', { error_message: null, file_path: null });
+    updateVideoStatus(existing.id, status, { error_message: null, file_path: null, ...(channel ? { channel_id: channel.id } : {}) });
+    if (status === 'approved') downloadAllApproved().catch((err) => console.error('[API] Download error:', err));
     res.status(200).json(getVideoById(existing.id));
     return;
   }
 
   const video = insertVideo({
-    channel_id: null,
+    channel_id: channel?.id ?? null,
     youtube_id: info.id,
     title: info.title,
     thumbnail_url: info.thumbnail || `https://i.ytimg.com/vi/${info.id}/hqdefault.jpg`,
     published_at: info.uploadDate ?? new Date().toISOString().slice(0, 10),
-    status: 'pending',
+    status,
     max_quality: quality ?? null,
     duration: info.duration,
   });
   if (!video) throw new HttpError(409, 'Video already exists');
+  if (status === 'approved') downloadAllApproved().catch((err) => console.error('[API] Download error:', err));
   res.status(201).json(video);
 }));
 
@@ -339,8 +356,14 @@ router.get('/api/status', wrap((_req, res) => {
     ...getServerStatus(),
     currentDownload: getCurrentDownload(),
     jobs: [...activeJobs.values()],
+    ytDlpUpdate: getLastYtDlpUpdate(),
     dryRun: DRY_RUN,
   });
+}));
+
+/** Update yt-dlp now instead of waiting for Monday. */
+router.post('/api/system/update-ytdlp', wrap(async (_req, res) => {
+  res.json(await updateYtDlp());
 }));
 
 // --- yt-dlp helpers (never with shell: true — the URL is user input) ---
@@ -385,16 +408,18 @@ interface VideoInfo {
   uploadDate: string | null;
   thumbnail: string | null;
   duration: number | null;
+  channelId: string | null;
+  channelName: string | null;
 }
 
 async function resolveVideo(url: string): Promise<VideoInfo> {
   if (DRY_RUN) {
     const match = url.match(/[?&]v=([\w-]{11})/) || url.match(/youtu\.be\/([\w-]{11})/) || url.match(/shorts\/([\w-]{11})/);
-    return { id: match ? match[1] : 'DRY' + Math.random().toString(36).slice(2, 10), title: 'Dry Run Video', uploadDate: null, thumbnail: null, duration: 300 };
+    return { id: match ? match[1] : 'DRY' + Math.random().toString(36).slice(2, 10), title: 'Dry Run Video', uploadDate: null, thumbnail: null, duration: 300, channelId: null, channelName: null };
   }
   // One call instead of two; --no-playlist so a "watch?v=...&list=..." URL yields one video.
-  const info = await ytdlpJson<{ id?: string; title?: string; upload_date?: string; thumbnail?: string; duration?: number }>(
-    ['--no-playlist', '--print', '%(.{id,title,upload_date,thumbnail,duration})j', url], 90_000,
+  const info = await ytdlpJson<{ id?: string; title?: string; upload_date?: string; thumbnail?: string; duration?: number; channel_id?: string; channel?: string }>(
+    ['--no-playlist', '--print', '%(.{id,title,upload_date,thumbnail,duration,channel_id,channel})j', url], 90_000,
   );
   if (!info.id) throw new HttpError(400, 'That does not look like a YouTube video');
   const raw = info.upload_date;
@@ -404,5 +429,7 @@ async function resolveVideo(url: string): Promise<VideoInfo> {
     uploadDate: raw && /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : null,
     thumbnail: info.thumbnail || null,
     duration: typeof info.duration === 'number' ? Math.round(info.duration) : null,
+    channelId: info.channel_id || null,
+    channelName: info.channel || null,
   };
 }

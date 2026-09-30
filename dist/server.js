@@ -6,7 +6,7 @@ import cron from 'node-cron';
 import { getDb, getAllChannels, resetStuckDownloads } from './db.js';
 import { router, HttpError } from './api.js';
 import { pollChannels } from './poller.js';
-import { downloadAllApproved, fetchChannelAvatar } from './downloader.js';
+import { downloadAllApproved, fetchChannelAvatar, updateYtDlp, logYtDlpVersion } from './downloader.js';
 import { MEDIA_DIR } from './env.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -58,6 +58,11 @@ cron.schedule('0 2 * * *', () => {
 cron.schedule('*/10 * * * *', () => {
     downloadAllApproved().catch((err) => console.error('[Cron] Sweep error:', err));
 });
+// Keep yt-dlp current: weekly, Monday 01:30, an hour before the daily sync.
+cron.schedule('30 1 * * 1', () => {
+    updateYtDlp().catch((err) => console.error('[Cron] yt-dlp update error:', err));
+});
+logYtDlpVersion();
 // Backfill folder.jpg avatars for channels that don't have one yet
 for (const ch of getAllChannels()) {
     if (!fs.existsSync(path.join(MEDIA_DIR, ch.name, 'folder.jpg'))) {
@@ -66,5 +71,5 @@ for (const ch of getAllChannels()) {
 }
 console.log('[Server] Running initial sync...');
 dailySyncJob().catch((err) => console.error('[Server] Initial sync error:', err));
-console.log('[Server] TildaTube is running (daily sync at 2:00am, download sweep every 10 min)');
+console.log('[Server] TildaTube is running (daily sync 2:00am, download sweep every 10 min, yt-dlp update Mondays 1:30am)');
 //# sourceMappingURL=server.js.map

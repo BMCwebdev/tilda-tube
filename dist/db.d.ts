@@ -90,6 +90,7 @@ export declare function updateVideoStatus(id: number, status: VideoStatus, extra
     published_at?: string;
     duration?: number | null;
     title?: string;
+    channel_id?: number | null;
 }): boolean;
 export declare function deleteVideoRow(id: number): boolean;
 /**

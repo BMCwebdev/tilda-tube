@@ -307,6 +307,7 @@ export function updateVideoStatus(
     published_at?: string;
     duration?: number | null;
     title?: string;
+    channel_id?: number | null;
   },
 ): boolean {
   let sql = `UPDATE videos SET status = ?, updated_at = datetime('now')`;
@@ -316,6 +317,7 @@ export function updateVideoStatus(
   if (extra?.published_at !== undefined) { sql += ', published_at = ?'; params.push(extra.published_at); }
   if (extra?.duration !== undefined) { sql += ', duration = ?'; params.push(extra.duration); }
   if (extra?.title !== undefined) { sql += ', title = ?'; params.push(extra.title); }
+  if (extra?.channel_id !== undefined) { sql += ', channel_id = ?'; params.push(extra.channel_id); }
   sql += ' WHERE id = ?';
   params.push(id);
   return getDb().prepare(sql).run(...params).changes > 0;

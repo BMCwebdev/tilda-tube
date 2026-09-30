@@ -1,7 +1,7 @@
 import { type Channel } from './db.js';
 /** Safety cap so a mis-set "All time" on a huge channel can't queue thousands of downloads at once. */
 export declare const MAX_NEW_VIDEOS_PER_CHANNEL = 75;
-/** Daily RSS poll: cheap, catches the ~15 most recent uploads per channel. */
+/** Daily poll: RSS first (cheap), yt-dlp listing when the feed is unavailable. */
 export declare function pollChannels(): Promise<void>;
 /**
  * Full backfill for a channel via yt-dlp playlist extraction: every video

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import type { Video } from '../lib/types';
+import type { Channel, Video } from '../lib/types';
 import { api, errorMessage } from '../lib/api';
 import { btn, card, colors, input } from '../lib/styles';
 import { QualitySelect } from './DatePresetPicker';
@@ -18,6 +18,8 @@ export function ApprovalQueue({ onAction }: Props) {
 
   const [videoUrl, setVideoUrl] = useState('');
   const [videoQuality, setVideoQuality] = useState(720);
+  const [videoChannel, setVideoChannel] = useState(''); // '' = no channel
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -37,6 +39,10 @@ export function ApprovalQueue({ onAction }: Props) {
     return () => clearInterval(interval);
   }, [fetchQueue]);
 
+  useEffect(() => {
+    api<Channel[]>('/api/channels').then(setChannels).catch(() => {});
+  }, []);
+
   const changed = () => {
     fetchQueue();
     onAction();
@@ -49,9 +55,13 @@ export function ApprovalQueue({ onAction }: Props) {
     setAdding(true);
     setAddMsg(null);
     try {
-      const v = await api<Video>('/api/videos', { method: 'POST', json: { url, maxQuality: videoQuality } });
+      const picked = channels.find((c) => String(c.id) === videoChannel);
+      // With a channel picked the video follows the channel's quality and Shorts settings.
+      const json = picked ? { url, channelId: picked.id } : { url, maxQuality: videoQuality };
+      const v = await api<Video>('/api/videos', { method: 'POST', json });
       setVideoUrl('');
-      setAddMsg({ ok: true, text: `Added "${v.title}". Approve it below to download.` });
+      const where = picked ? ` under ${picked.name}` : '';
+      setAddMsg({ ok: true, text: v.status === 'approved' ? `Added "${v.title}"${where}. Downloading now.` : `Added "${v.title}"${where}. Approve it below to download.` });
       changed();
     } catch (err) {
       setAddMsg({ ok: false, text: errorMessage(err) });
@@ -98,7 +108,11 @@ export function ApprovalQueue({ onAction }: Props) {
           autoCapitalize="off"
           autoCorrect="off"
         />
-        <QualitySelect value={videoQuality} onChange={setVideoQuality} />
+        <select value={videoChannel} onChange={(e) => setVideoChannel(e.target.value)} style={{ ...input, flex: '0 1 180px' }} title="File this video under one of your channels">
+          <option value="">No channel</option>
+          {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        {!videoChannel && <QualitySelect value={videoQuality} onChange={setVideoQuality} />}
         <button type="submit" disabled={adding} style={btn('primary', { disabled: adding })}>
           {adding ? 'Checking…' : 'Add video'}
         </button>

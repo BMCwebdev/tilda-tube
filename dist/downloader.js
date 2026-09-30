@@ -250,4 +250,43 @@ export function removeVideoFiles(filePath) {
     catch { /* ignore */ }
     return removed;
 }
+let lastUpdate = null;
+export function getLastYtDlpUpdate() {
+    return lastUpdate;
+}
+/**
+ * Run `yt-dlp -U`. YouTube changes often and a yt-dlp older than ~90 days is
+ * the most common reason downloads start failing, so the server does this on
+ * a schedule. Never throws; the outcome is logged and kept for /api/status.
+ */
+export function updateYtDlp() {
+    return new Promise((resolve) => {
+        if (DRY_RUN) {
+            lastUpdate = { at: new Date().toISOString(), ok: true, message: 'DRY_RUN: skipped' };
+            resolve(lastUpdate);
+            return;
+        }
+        execFile(YT_DLP, ['-U'], { env: childEnv, timeout: 5 * 60 * 1000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+            const lines = `${stdout}\n${stderr}`.split('\n').map((l) => l.trim()).filter(Boolean);
+            const message = (lines[lines.length - 1] || error?.message || 'no output').slice(0, 300);
+            lastUpdate = { at: new Date().toISOString(), ok: !error, message };
+            if (error)
+                console.error(`[Updater] yt-dlp -U failed: ${message}`);
+            else
+                console.log(`[Updater] ${message}`);
+            resolve(lastUpdate);
+        });
+    });
+}
+/** Log the installed yt-dlp version at startup so the log shows what ran. */
+export function logYtDlpVersion() {
+    if (DRY_RUN)
+        return;
+    execFile(YT_DLP, ['--version'], { env: childEnv, timeout: 30_000 }, (error, stdout) => {
+        if (error)
+            console.warn(`[Updater] Could not read yt-dlp version: ${error.message}`);
+        else
+            console.log(`[Updater] yt-dlp ${stdout.trim()}`);
+    });
+}
 //# sourceMappingURL=downloader.js.map

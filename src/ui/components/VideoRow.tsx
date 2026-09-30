@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Video } from '../lib/types';
+import { groupName } from '../lib/video';
 import { api, errorMessage } from '../lib/api';
 import { btn, colors, formatDate, formatDuration, shortError, statusColor, statusLabel } from '../lib/styles';
 
@@ -69,7 +70,7 @@ export function VideoRow({ video, onChanged, onError, showChannel = true, select
 
   const isShort = video.file_path?.includes('/Shorts/');
   const meta = [
-    showChannel ? (video.channel_name || (video.source === 'local' ? 'Imported file' : 'Single video')) : null,
+    showChannel ? groupName(video) : null,
     formatDate(video.published_at),
     formatDuration(video.duration) || null,
     isShort ? 'Shorts' : null,

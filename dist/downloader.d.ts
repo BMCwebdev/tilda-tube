@@ -22,4 +22,18 @@ export declare function fetchChannelAvatar(channelId: string, channelName: strin
  * an error. Returns true if anything was removed.
  */
 export declare function removeVideoFiles(filePath: string): boolean;
+export interface UpdateResult {
+    at: string;
+    ok: boolean;
+    message: string;
+}
+export declare function getLastYtDlpUpdate(): UpdateResult | null;
+/**
+ * Run `yt-dlp -U`. YouTube changes often and a yt-dlp older than ~90 days is
+ * the most common reason downloads start failing, so the server does this on
+ * a schedule. Never throws; the outcome is logged and kept for /api/status.
+ */
+export declare function updateYtDlp(): Promise<UpdateResult>;
+/** Log the installed yt-dlp version at startup so the log shows what ran. */
+export declare function logYtDlpVersion(): void;
 //# sourceMappingURL=downloader.d.ts.map

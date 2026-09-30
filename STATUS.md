@@ -1,5 +1,28 @@
 # TildaTube - Status
 
+## 2026-09-29 — Folders group like channels; add a video to a channel
+
+- [x] Library groups videos with no channel row by their folder on the drive (Good Witch,
+      Star Trek TNG, and a hand-added PHianonize video now each show as one group).
+- [x] "Add a single video" can file the video under an existing channel (settings and
+      auto-approve apply); rejected with a clear message if the video is from another channel.
+- [x] New import folders get a `folder.jpg` from the first video's thumbnail.
+- [x] Built, DRY_RUN smoke-tested, run against a production DB dump, screenshots checked.
+- [ ] Deploy (with the 2026-09-18 follow-up, still pending).
+- [ ] On the mini: `folder.jpg` for the two existing import folders; remove the duplicate
+      Good Witch S02 E02 (uploaded 2026-09-18 and again 2026-09-21, identical size).
+
+## 2026-09-18 — Deployed the repair; small follow-up built
+
+- [x] `f5f28c1` deployed by Brian; `launchctl list` shows a PID and exit 0; first retried
+      video downloaded end to end in 40 s and was filed under Shorts correctly.
+- [x] Observed: YouTube RSS feeds 404 for 10 of 12 channels from two networks; one bare 403
+      that succeeded on retry. Built: RSS → yt-dlp fallback in the poll; weekly `yt-dlp -U`.
+- [x] Researched remote access: Tailscale does not support Catalina (last build 1.70). Plan is
+      the Apple TV as a Tailscale subnet router; see the private ops runbook.
+- [ ] Deploy the follow-up (pending commit).
+- [ ] Login PIN, then Tailscale via Apple TV, then the visual video picker.
+
 ## 2026-09-17 — Audit and repair (laptop-side; deploy pending)
 
 **Found (on the mini):**
@@ -26,8 +49,7 @@
 - [x] UI: shared components, per-channel video lists, search/filters, status bar with current download
 
 **Not done / next:**
-- [ ] Deploy to the mini (runbook in the private ops folder)
-- [ ] Confirm exit 78 is gone after the plist change; if not, Full Disk Access for node
+- [x] Deployed 2026-09-18; exit 78 gone with the log-path change
 - [ ] Remote viewing via Tailscale; a login PIN for the web UI before that
 - [ ] Visual video picker with thumbnails + date range
 - [ ] Design pass

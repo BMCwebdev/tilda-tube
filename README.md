@@ -5,7 +5,7 @@ A self-hosted YouTube media server for kids. Parents curate a safe, ad-free libr
 ## How it works
 
 1. **Parent adds YouTube channels** (or single videos, or their own files) from a phone
-2. **A daily job polls each channel's RSS feed** at 2:00 am for new uploads
+2. **A daily job polls each channel's RSS feed** at 2:00 am for new uploads (asking yt-dlp instead when YouTube's feed is down)
 3. **New videos land in an approval queue**, or download automatically if the channel is set to auto-download
 4. **Approved videos are downloaded** with `yt-dlp` to an external drive
 5. **Infuse on the Apple TV browses the drive** over SMB; the child sees only curated folders
@@ -81,14 +81,21 @@ Keep the mini awake: System Preferences → Energy Saver → sleep **Never**, **
   one at a time, or tick several and use the bulk buttons.
 - **Add a single video**: paste a video link at the top. Links copied from a browser with
   `&list=` or `&t=` in them are fine. Approve it once it appears.
+- **File it under a channel**: pick one of your channels next to the link to add a video the
+  channel's date range skipped (an older favourite, say). It then uses that channel's quality
+  and Shorts settings, skips the queue if the channel auto-approves, and is listed with the
+  channel in the Library. The video has to be from that channel; otherwise leave "No channel"
+  and it is filed under its own channel's folder on the drive.
 
 ### Library tab
 
-- **Downloaded / Failed / Rejected / Everything** filters, title search, channel picker.
+- **Downloaded / Failed / Rejected / Everything** filters, title search, and a picker that lists
+  every channel and every folder on the drive (imported files group by their folder).
 - **Failed** videos show the reason; **Retry** one or **Retry all**. **Remove** drops one you don't want.
 - **Delete file** removes a downloaded video from the drive. It stays listed as "Removed" so it won't be downloaded again; **Download again** brings it back.
 - **Import a file**: upload a video from your phone or computer into any folder (or a new one).
-  It gets a thumbnail and appears in Infuse like everything else.
+  It gets a thumbnail and appears in Infuse like everything else. A new folder gets a `folder.jpg`
+  from its first video so Infuse shows it with artwork like a channel folder.
 
 ### What the child sees
 
@@ -128,7 +135,7 @@ Before committing source changes, run `npm run build`; `dist/` is tracked so the
 |---|---|
 | `launchctl list` shows `78` and no PID | launchd failed before node started. The plist's log paths must be on the boot disk (`~/Library/Logs/`), not the external drive. |
 | Downloads fail with `HTTP Error 403` or "No supported JavaScript runtime" | Deno is not on the PATH yt-dlp sees. `ln -sf ~/.deno/bin/deno /usr/local/bin/deno`. |
-| Downloads fail with other YouTube errors | `yt-dlp -U`. YouTube changes often; a yt-dlp older than ~90 days breaks. |
+| Downloads fail with other YouTube errors | The server updates yt-dlp weekly; force it with `curl -X POST localhost:3001/api/system/update-ytdlp`. A single bare `403` often succeeds on Retry. |
 | Video stuck at "Downloading" after a restart | It is reset to Failed on startup; press Retry. |
 | "Can't reach the server" in the UI | `launchctl list \| grep tildatube`, then `tail ~/Library/Logs/tildatube.err`. |
 | External drive not mounted | The server refuses to start rather than create an empty database on the boot disk. Mount the drive; launchd restarts it. |
@@ -147,7 +154,8 @@ yt-dlp --no-warnings --print title --no-download "https://www.youtube.com/watch?
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/status` | Counts, current download, background jobs |
+| GET | `/api/status` | Counts, current download, background jobs, last yt-dlp update |
+| POST | `/api/system/update-ytdlp` | Run `yt-dlp -U` now (also runs weekly on its own) |
 | GET | `/api/channels` | Channels with video/pending/done/error counts |
 | POST | `/api/channels` | `{ url, fromDate, autoApprove, minDuration, maxQuality }` |
 | PATCH | `/api/channels/:id` | Any of `fromDate, autoApprove, minDuration, maxQuality` |
@@ -156,7 +164,7 @@ yt-dlp --no-warnings --print title --no-download "https://www.youtube.com/watch?
 | DELETE | `/api/channels/:id?deleteFiles=true` | Remove channel and its rows; optionally its files |
 | GET | `/api/queue` | Pending videos |
 | GET | `/api/videos` | All videos |
-| POST | `/api/videos` | `{ url, maxQuality }` add a single video (pending) |
+| POST | `/api/videos` | `{ url, maxQuality?, channelId? }` add a single video; with `channelId` it follows that channel's settings (must be from that channel) |
 | POST | `/api/videos/:id/approve` | pending/rejected → approved |
 | POST | `/api/videos/:id/reject` | pending/approved/error → rejected |
 | POST | `/api/videos/:id/retry` | error/rejected/deleted → approved |

@@ -1,6 +1,6 @@
 # Handoff Notes
 
-Last updated 2026-09-17.
+Last updated 2026-09-29.
 
 ## What this is
 
@@ -11,10 +11,39 @@ See `README.md` for setup and daily use, `CLAUDE.md` for architecture and patter
 ## State of the deployment
 
 - The Mac mini runs from `~/tilda-tube` (pull-only clone) via the launchd job `com.tildatube`.
-- **As of 2026-09-17 the changes below are built and tested on the laptop but NOT yet deployed.**
-  The mini was on `88203f5` and, at the time of writing, the app was only running because
-  someone started `node dist/server.js` by hand in a terminal; the launchd job had been
-  failing with exit 78 for months.
+- The 2026-09-17 change set (`f5f28c1`) is deployed; launchd owns the service (PID, exit 0).
+- The 2026-09-18 follow-up and the 2026-09-29 change set are built and tested on the laptop,
+  pending Brian's commit and deploy.
+
+## What changed on 2026-09-29 (folders behave like channels)
+
+Why: Brian imported a season of Good Witch into a new folder and the UI listed the files under
+a single "Imported files" bucket instead of as a group, and there was no way to add one older
+YouTube video to an existing channel.
+
+- `ui/lib/video.ts`: `groupName()` = channel name, else the folder the file lives in, else
+  "Imported files" / "Single videos". `Library.tsx` and `VideoRow.tsx` use it, so imported
+  folders (and hand-added videos once downloaded) group the way Infuse shows them.
+- `api.ts`: `POST /api/videos` takes an optional `channelId`. The video gets that channel's
+  settings, skips the queue when the channel auto-approves, and is re-attached on a re-add.
+  `resolveVideo()` now also returns the video's YouTube channel; a mismatch with the picked
+  channel is a 400 because yt-dlp would file the download under the other channel's folder.
+- `db.ts`: `updateVideoStatus()` accepts `channel_id`.
+- `localimport.ts`: `ensureFolderJpg()` copies the first thumbnail to `folder.jpg` when the
+  folder has none, so import folders get artwork in Infuse like channel folders do.
+- `ApprovalQueue.tsx`: channel picker next to the URL; the quality select hides when a
+  channel is picked (the channel's quality applies).
+- Tested: DRY_RUN smoke (channel/no channel, auto-approve, bad ids, dup, re-add, import) and
+  a run against a dump of the production DB; screenshots of Queue and Library.
+
+## What changed on 2026-09-18 (small follow-up)
+
+- `poller.ts`: when a channel's RSS feed is not 200 (ten of twelve were 404 on 2026-09-17,
+  from two networks), the poll falls back to a yt-dlp listing of the 15 most recent uploads.
+  RSS and backfill now share one `addDiscovered()` insert path and one `listChannelVideos()`.
+- `downloader.ts`: `updateYtDlp()` runs `yt-dlp -U`, never throws, keeps the last result;
+  `logYtDlpVersion()` at startup. `server.ts` schedules the update Mondays 01:30.
+  `api.ts`: `/api/status` gains `ytDlpUpdate`; `POST /api/system/update-ytdlp` runs it now.
 
 ## What changed on 2026-09-17 (one big change set)
 
@@ -72,7 +101,8 @@ Then in the UI: Library → Failed → Retry all.
 - **The mini can't build.** Vite/esbuild binaries need macOS 12+. `npm install --production` there skips them.
 - **Deno is not from Homebrew** on the mini; it lives in `~/.deno/bin`. If YouTube downloads
   fail with 403 and the error mentions "No supported JavaScript runtime", PATH lost it again.
-- **yt-dlp goes stale in ~90 days.** `yt-dlp -U` is the first thing to try when downloads break.
+- **yt-dlp goes stale in ~90 days.** The server now runs `yt-dlp -U` weekly; `POST /api/system/update-ytdlp` forces it. Still the first thing to try when downloads break.
+- **YouTube is flaky.** A bare `HTTP Error 403` can succeed on the next retry; RSS feeds can 404 for most channels at once. The code tolerates both.
 - Every yt-dlp call on the 2012 mini takes ~40 s just to start (Deno solving YouTube's challenge).
 - There is no test suite. Use the DRY_RUN smoke test described in `CLAUDE.md`.
 - Exit 78 from launchd means launchd itself failed before starting node (bad log path, TCC, etc).
@@ -80,8 +110,10 @@ Then in the UI: Library → Failed → Retry all.
 
 ## Ideas not done yet
 
-- Remote viewing away from home: Tailscale on the mini + Apple TV + phone, Infuse over the
-  tunnel. Do not port-forward: the app has no authentication and the mini's OS is end-of-life.
+- Remote viewing away from home: Tailscale, but **not on the mini** (Tailscale needs macOS 12+;
+  1.70 was the last Catalina build). Use the Apple TV as a Tailscale subnet router for
+  `192.168.0.0/24`; the mini then needs nothing. Do not port-forward: the app has no
+  authentication and the mini's OS is end-of-life.
 - Authentication on the web UI (a single shared PIN would do) before any remote access.
 - A visual "pick videos" browser with thumbnails and date range over a channel's full listing.
 - A proper design pass; the inline-style approach is consistent but plain.

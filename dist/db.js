@@ -237,6 +237,10 @@ export function updateVideoStatus(id, status, extra) {
         sql += ', title = ?';
         params.push(extra.title);
     }
+    if (extra?.channel_id !== undefined) {
+        sql += ', channel_id = ?';
+        params.push(extra.channel_id);
+    }
     sql += ' WHERE id = ?';
     params.push(id);
     return getDb().prepare(sql).run(...params).changes > 0;

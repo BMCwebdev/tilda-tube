@@ -3,6 +3,7 @@ import type { Video, VideoStatus } from '../lib/types';
 import { api, errorMessage, uploadFile } from '../lib/api';
 import { btn, card, colors, input, label } from '../lib/styles';
 import { VideoRow } from './VideoRow';
+import { groupName } from '../lib/video';
 
 type Filter = 'done' | 'error' | 'rejected' | 'all';
 
@@ -119,7 +120,7 @@ export function Library({ onAction }: Props) {
 
   const channelNames = useMemo(() => {
     const names = new Set<string>();
-    for (const v of videos) names.add(v.channel_name || (v.source === 'local' ? 'Imported files' : 'Single videos'));
+    for (const v of videos) names.add(groupName(v));
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [videos]);
 
@@ -132,8 +133,7 @@ export function Library({ onAction }: Props) {
   const filtered = videos.filter((v) => {
     if (filter !== 'all' && v.status !== filter) return false;
     if (filter === 'all' && v.status === 'deleted') return false;
-    const name = v.channel_name || (v.source === 'local' ? 'Imported files' : 'Single videos');
-    if (channel !== 'all' && name !== channel) return false;
+    if (channel !== 'all' && groupName(v) !== channel) return false;
     if (search && !v.title.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -186,7 +186,7 @@ export function Library({ onAction }: Props) {
           style={{ ...input, flex: '1 1 180px' }}
         />
         <select value={channel} onChange={(e) => setChannel(e.target.value)} style={{ ...input, flex: '0 1 200px' }}>
-          <option value="all">All channels</option>
+          <option value="all">All channels and folders</option>
           {channelNames.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         {filter === 'error' && filtered.length > 0 && (

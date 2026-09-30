@@ -61,7 +61,9 @@ export async function importLocalFile(stream, opts) {
         let duration = null;
         if (!DRY_RUN) {
             duration = await probeDuration(tmpPath);
-            await makeThumbnail(tmpPath, path.join(destDir, `${finalBase}.jpg`), duration);
+            const jpgPath = path.join(destDir, `${finalBase}.jpg`);
+            await makeThumbnail(tmpPath, jpgPath, duration);
+            ensureFolderJpg(destDir, jpgPath);
         }
         fs.renameSync(tmpPath, finalPath);
         const video = insertVideo({
@@ -86,6 +88,22 @@ export async function importLocalFile(stream, opts) {
         }
         catch { /* already gone */ }
         throw err;
+    }
+}
+/**
+ * Channel folders get a folder.jpg (the channel avatar) so Infuse shows them
+ * with artwork. A folder the parent made by importing has no avatar, so use the
+ * first imported video's thumbnail; never overwrite one that is already there.
+ */
+function ensureFolderJpg(dir, jpgPath) {
+    const target = path.join(dir, 'folder.jpg');
+    if (fs.existsSync(target) || !fs.existsSync(jpgPath))
+        return;
+    try {
+        fs.copyFileSync(jpgPath, target);
+    }
+    catch (err) {
+        console.warn(`[Import] Could not create folder.jpg in ${path.basename(dir)}:`, err);
     }
 }
 function uniqueBase(dir, base, ext) {
